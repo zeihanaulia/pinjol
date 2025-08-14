@@ -19,6 +19,14 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "cli" {
+		runCLI()
+		return
+	}
+	mainServer()
+}
+
+func mainServer() {
 	port := getEnv("PORT", "8080")
 	env := getEnv("APP_ENV", "dev")
 
@@ -36,6 +44,13 @@ func main() {
 
 	e.GET("/healthz", healthHandler)
 	e.GET("/version", versionHandler(version, buildTime))
+
+	// Loan endpoints
+	e.POST("/loans", createLoanHandler)
+	e.GET("/loans/:id", getLoanHandler)
+	e.POST("/loans/:id/pay", payLoanHandler)
+	e.GET("/loans/:id/outstanding", getOutstandingHandler)
+	e.GET("/loans/:id/delinquent", getDelinquencyHandler)
 
 	addr := fmt.Sprintf(":%s", port)
 	go func() {
