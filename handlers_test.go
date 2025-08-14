@@ -50,19 +50,37 @@ func TestCreateLoanAPI(t *testing.T) {
 			name:           "invalid principal",
 			body:           `{"principal": -1000000, "annual_rate": 0.10, "start_date": "2025-08-15"}`,
 			expectedStatus: http.StatusBadRequest,
-			checkResponse:  nil,
+			checkResponse: func(t *testing.T, body string) {
+				var resp map[string]string
+				json.Unmarshal([]byte(body), &resp)
+				if resp["error"] != "invalid request" {
+					t.Errorf("expected error 'invalid request', got %q", resp["error"])
+				}
+			},
 		},
 		{
 			name:           "unsupported product",
 			body:           `{"principal": 5000001, "annual_rate": 0.10, "start_date": "2025-08-15"}`,
 			expectedStatus: http.StatusBadRequest,
-			checkResponse:  nil,
+			checkResponse: func(t *testing.T, body string) {
+				var resp map[string]string
+				json.Unmarshal([]byte(body), &resp)
+				if resp["error"] != "weekly equal amount not integral" {
+					t.Errorf("expected error 'weekly equal amount not integral', got %q", resp["error"])
+				}
+			},
 		},
 		{
 			name:           "invalid date format",
 			body:           `{"principal": 5000000, "annual_rate": 0.10, "start_date": "invalid-date"}`,
 			expectedStatus: http.StatusBadRequest,
-			checkResponse:  nil,
+			checkResponse: func(t *testing.T, body string) {
+				var resp map[string]string
+				json.Unmarshal([]byte(body), &resp)
+				if resp["error"] != "invalid request" {
+					t.Errorf("expected error 'invalid request', got %q", resp["error"])
+				}
+			},
 		},
 	}
 
@@ -130,14 +148,26 @@ func TestPaymentAPI(t *testing.T) {
 			loanID:         loan.ID,
 			body:           `{"amount": 100000}`,
 			expectedStatus: http.StatusBadRequest,
-			checkResponse:  nil,
+			checkResponse: func(t *testing.T, body string) {
+				var resp map[string]string
+				json.Unmarshal([]byte(body), &resp)
+				if resp["error"] != "amount must equal this week's payable" {
+					t.Errorf("expected error 'amount must equal this week's payable', got %q", resp["error"])
+				}
+			},
 		},
 		{
 			name:           "loan not found",
 			loanID:         "nonexistent",
 			body:           `{"amount": 110000}`,
 			expectedStatus: http.StatusNotFound,
-			checkResponse:  nil,
+			checkResponse: func(t *testing.T, body string) {
+				var resp map[string]string
+				json.Unmarshal([]byte(body), &resp)
+				if resp["error"] != "loan not found" {
+					t.Errorf("expected error 'loan not found', got %q", resp["error"])
+				}
+			},
 		},
 	}
 
@@ -180,6 +210,7 @@ func TestOutstandingAPI(t *testing.T) {
 		loanID              string
 		expectedStatus      int
 		expectedOutstanding int64
+		checkError          func(t *testing.T, body string)
 	}{
 		{
 			name:                "valid outstanding check",
@@ -191,6 +222,13 @@ func TestOutstandingAPI(t *testing.T) {
 			name:           "loan not found",
 			loanID:         "nonexistent",
 			expectedStatus: http.StatusNotFound,
+			checkError: func(t *testing.T, body string) {
+				var resp map[string]string
+				json.Unmarshal([]byte(body), &resp)
+				if resp["error"] != "loan not found" {
+					t.Errorf("expected error 'loan not found', got %q", resp["error"])
+				}
+			},
 		},
 	}
 
@@ -213,6 +251,8 @@ func TestOutstandingAPI(t *testing.T) {
 				if resp.Outstanding != tt.expectedOutstanding {
 					t.Errorf("expected outstanding %d, got %d", tt.expectedOutstanding, resp.Outstanding)
 				}
+			} else if tt.checkError != nil {
+				tt.checkError(t, rec.Body.String())
 			}
 		})
 	}
@@ -240,6 +280,7 @@ func TestDelinquencyAPI(t *testing.T) {
 		expectedStatus     int
 		expectedDelinquent bool
 		expectedObserved   int
+		checkError         func(t *testing.T, body string)
 	}{
 		{
 			name:               "delinquent check with time override",
@@ -254,6 +295,13 @@ func TestDelinquencyAPI(t *testing.T) {
 			loanID:         "nonexistent",
 			nowParam:       "",
 			expectedStatus: http.StatusNotFound,
+			checkError: func(t *testing.T, body string) {
+				var resp map[string]string
+				json.Unmarshal([]byte(body), &resp)
+				if resp["error"] != "loan not found" {
+					t.Errorf("expected error 'loan not found', got %q", resp["error"])
+				}
+			},
 		},
 	}
 
@@ -280,6 +328,8 @@ func TestDelinquencyAPI(t *testing.T) {
 				if resp.ObservedWeek != tt.expectedObserved {
 					t.Errorf("expected observed week %d, got %d", tt.expectedObserved, resp.ObservedWeek)
 				}
+			} else if tt.checkError != nil {
+				tt.checkError(t, rec.Body.String())
 			}
 		})
 	}

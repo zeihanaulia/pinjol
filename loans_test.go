@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -406,5 +407,156 @@ func TestPropertyFullPayment(t *testing.T) {
 	err = loan.MakePayment(loan.WeeklyDue, now)
 	if err != ErrAlreadyPaid {
 		t.Errorf("expected ErrAlreadyPaid, got %v", err)
+	}
+}
+
+// E1) Week boundary off-by-one at 7/14 days
+func TestWeekBoundaryEdgeCases(t *testing.T) {
+	startDate := time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)
+	loan, err := NewLoan("test", 5_000_000, 0.10, startDate)
+	if err != nil {
+		t.Fatalf("failed to create loan: %v", err)
+	}
+
+	tests := []struct {
+		name         string
+		now          time.Time
+		expectedWeek int
+	}{
+		{
+			name:         "week 1 end boundary",
+			now:          time.Date(2025, 8, 7, 23, 59, 59, 0, time.UTC),
+			expectedWeek: 1,
+		},
+		{
+			name:         "week 2 start boundary",
+			now:          time.Date(2025, 8, 8, 0, 0, 0, 0, time.UTC),
+			expectedWeek: 2,
+		},
+		{
+			name:         "week 2 end boundary",
+			now:          time.Date(2025, 8, 14, 23, 59, 59, 0, time.UTC),
+			expectedWeek: 2,
+		},
+		{
+			name:         "week 3 start boundary",
+			now:          time.Date(2025, 8, 15, 0, 0, 0, 0, time.UTC),
+			expectedWeek: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			weekIndex := loan.WeekIndexAt(tt.now)
+			if weekIndex != tt.expectedWeek {
+				t.Errorf("expected week %d, got %d", tt.expectedWeek, weekIndex)
+			}
+		})
+	}
+}
+
+// E3) Far-future now cap to week 50
+func TestFarFutureWeekCap(t *testing.T) {
+	startDate := time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)
+	loan, err := NewLoan("test", 5_000_000, 0.10, startDate)
+	if err != nil {
+		t.Fatalf("failed to create loan: %v", err)
+	}
+
+	// Far future date
+	farFuture := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+	
+	// Test without payments - should be delinquent
+	delinquent, _, observed := loan.IsDelinquent(farFuture)
+	if observed != 50 {
+		t.Errorf("expected observed week 50, got %d", observed)
+	}
+	if !delinquent {
+		t.Errorf("expected delinquent true, got false")
+	}
+
+	// Pay all 50 weeks
+	now := time.Now()
+	for i := 0; i < 50; i++ {
+		err := loan.MakePayment(loan.WeeklyDue, now)
+		if err != nil {
+			t.Fatalf("payment %d failed: %v", i+1, err)
+		}
+	}
+
+	// Test with all payments - should not be delinquent
+	delinquent, _, observed = loan.IsDelinquent(farFuture)
+	if observed != 50 {
+		t.Errorf("expected observed week 50, got %d", observed)
+	}
+	if delinquent {
+		t.Errorf("expected delinquent false, got true")
+	}
+}
+
+// E4) Paying when start date is in the future
+func TestFutureStartDatePayment(t *testing.T) {
+	// Start date in future
+	futureStart := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+	loan, err := NewLoan("test", 5_000_000, 0.10, futureStart)
+	if err != nil {
+		t.Fatalf("failed to create loan: %v", err)
+	}
+
+	now := time.Date(2025, 8, 15, 0, 0, 0, 0, time.UTC)
+
+	// Should allow early payment
+	err = loan.MakePayment(loan.WeeklyDue, now)
+	if err != nil {
+		t.Errorf("expected early payment to succeed, got error: %v", err)
+	}
+
+	// Delinquency should be false when now < start
+	delinquent, _, _ := loan.IsDelinquent(now)
+	if delinquent {
+		t.Errorf("expected delinquent false when now < start, got true")
+	}
+}
+
+// E10) Property test: conservation of totals
+func TestConservationOfTotals(t *testing.T) {
+	principals := []int64{5_000_000, 10_000_000}
+	rate := 0.10
+
+	for _, principal := range principals {
+		t.Run(fmt.Sprintf("principal_%d", principal), func(t *testing.T) {
+			// Only test if total_due is divisible by 50 (supported product)
+			totalDue := principal + int64(float64(principal)*rate)
+			if totalDue%50 != 0 {
+				t.Skipf("skipping unsupported product: total_due %d not divisible by 50", totalDue)
+			}
+
+			loan, err := NewLoan("test", principal, rate, time.Date(2025, 8, 15, 0, 0, 0, 0, time.UTC))
+			if err != nil {
+				t.Fatalf("failed to create loan: %v", err)
+			}
+
+			totalPaid := int64(0)
+			now := time.Now()
+
+			// Pay all 50 weeks
+			for i := 0; i < 50; i++ {
+				err := loan.MakePayment(loan.WeeklyDue, now)
+				if err != nil {
+					t.Fatalf("payment %d failed: %v", i+1, err)
+				}
+				totalPaid += loan.WeeklyDue
+			}
+
+			// Verify conservation
+			if totalPaid != totalDue {
+				t.Errorf("total paid %d != total due %d", totalPaid, totalDue)
+			}
+
+			outstanding := loan.GetOutstanding()
+			if outstanding != 0 {
+				t.Errorf("expected outstanding 0, got %d", outstanding)
+			}
+		})
 	}
 }

@@ -127,6 +127,15 @@ func payLoanHandler(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": ErrLoanNotFound.Error()})
 	}
 
+	// Find the first unpaid week index (1-based) before making payment
+	firstUnpaidWeek := 0
+	for i, week := range loan.Schedule {
+		if !week.Paid {
+			firstUnpaidWeek = i + 1 // Convert to 1-based index
+			break
+		}
+	}
+
 	now := time.Now().UTC()
 	err := loan.MakePayment(req.Amount, now)
 	if err != nil {
@@ -139,7 +148,7 @@ func payLoanHandler(c echo.Context) error {
 	mu.Unlock()
 
 	response := PaymentResponse{
-		PaidWeek:             loan.PaidCount,
+		PaidWeek:             firstUnpaidWeek,
 		RemainingOutstanding: remainingOutstanding,
 	}
 

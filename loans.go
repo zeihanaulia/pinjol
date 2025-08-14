@@ -123,7 +123,13 @@ func (l *Loan) WeekIndexAt(now time.Time) int {
 	return weekIndex
 }
 
-// IsDelinquent checks if the loan is delinquent based on the latest two scheduled weeks
+// IsDelinquent checks if the loan is delinquent based on the latest two scheduled weeks.
+// 
+// Week indexing: idx = WeekIndexAt(now) where days 0-6→1, 7-13→2, 14-20→3, etc.
+// We only evaluate the two most recent scheduled weeks: (idx-2, idx-1).
+// Returns false when idx < 3 because there aren't two completed weeks to judge.
+// 
+// Returns: (isDelinquent, consecutiveUnpaidStreak, observedWeek)
 func (l *Loan) IsDelinquent(now time.Time) (bool, int, int) {
 	observedWeek := l.WeekIndexAt(now)
 	
