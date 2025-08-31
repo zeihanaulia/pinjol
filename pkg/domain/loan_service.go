@@ -115,6 +115,66 @@ func (s *LoanService) ProcessPayment(loan *Loan, req PaymentRequest) error {
 	return loan.MakePayment(req.Amount, req.Now)
 }
 
+// ProcessPaymentFromRequest handles the complete payment process from HTTP request
+func (s *LoanService) ProcessPaymentFromRequest(loan *Loan, amount int64, now time.Time) (*PaymentResponse, error) {
+	req := PaymentRequest{
+		Amount: amount,
+		Now:    now,
+	}
+
+	// Validate payment request
+	if err := s.ValidatePaymentRequest(req); err != nil {
+		return nil, s.mapPaymentValidationError(err, req)
+	}
+
+	// Find the first unpaid week before making payment
+	firstUnpaidWeek := 0
+	expectedAmount := int64(0)
+	for i, week := range loan.Schedule {
+		if !week.Paid {
+			firstUnpaidWeek = i + 1 // Convert to 1-based index
+			expectedAmount = week.Amount
+			break
+		}
+	}
+
+	// Debug: check if we found unpaid week
+	if firstUnpaidWeek == 0 {
+		// Count total weeks and paid weeks for debugging
+		totalWeeks := len(loan.Schedule)
+		paidWeeks := 0
+		for _, week := range loan.Schedule {
+			if week.Paid {
+				paidWeeks++
+			}
+		}
+		// If no unpaid week found, this might indicate all weeks are paid or schedule is empty
+		return nil, &BusinessError{
+			Message: "No unpaid weeks found",
+			Code:    "NO_UNPAID_WEEKS",
+			Details: map[string]string{
+				"loan_id":     loan.ID,
+				"total_weeks": fmt.Sprintf("%d", totalWeeks),
+				"paid_weeks":  fmt.Sprintf("%d", paidWeeks),
+			},
+		}
+	}
+
+	// Process the payment
+	err := s.ProcessPayment(loan, req)
+	if err != nil {
+		return nil, s.mapPaymentBusinessError(err, loan, req, firstUnpaidWeek, expectedAmount)
+	}
+
+	// Recompute outstanding after payment
+	remainingOutstanding := loan.GetOutstanding()
+
+	return &PaymentResponse{
+		PaidWeek:             firstUnpaidWeek,
+		RemainingOutstanding: remainingOutstanding,
+	}, nil
+}
+
 // Value objects for responses
 
 // LoanResponse represents the loan data for response
@@ -284,6 +344,67 @@ func (s *LoanService) convertLoanToResponse(loan *Loan) *LoanResponse {
 		Schedule:    schedule,
 		PaidCount:   loan.PaidCount,
 		Outstanding: loan.Outstanding,
+	}
+}
+
+func (s *LoanService) mapPaymentValidationError(err error, req PaymentRequest) error {
+	errMsg := err.Error()
+	if errMsg == "payment amount must be greater than 0" {
+		return &ValidationError{
+			Field:   "amount",
+			Message: "Payment amount must be greater than 0",
+			Code:    "INVALID_PAYMENT_AMOUNT",
+			Details: map[string]string{
+				"provided":  fmt.Sprintf("%d", req.Amount),
+				"required":  "Must be a positive integer greater than 0",
+				"min_value": "1",
+			},
+		}
+	}
+	return &ValidationError{
+		Field:   "amount",
+		Message: errMsg,
+		Code:    "INVALID_PAYMENT_AMOUNT",
+		Details: map[string]string{
+			"error": errMsg,
+		},
+	}
+}
+
+func (s *LoanService) mapPaymentBusinessError(err error, loan *Loan, req PaymentRequest, firstUnpaidWeek int, expectedAmount int64) error {
+	errMsg := err.Error()
+	switch errMsg {
+	case "loan already fully paid":
+		return &BusinessError{
+			Message: "Loan is already fully paid",
+			Code:    "LOAN_ALREADY_PAID",
+			Details: map[string]string{
+				"loan_id":         loan.ID,
+				"paid_weeks":      fmt.Sprintf("%d", loan.PaidCount),
+				"total_weeks":     "50",
+				"outstanding":     fmt.Sprintf("%d", loan.Outstanding),
+				"suggestion":      "No further payments are required for this loan",
+			},
+		}
+	case "amount must equal this week's payable":
+		return &BusinessError{
+			Message: "Payment amount does not match the required weekly amount",
+			Code:    "INCORRECT_PAYMENT_AMOUNT",
+			Details: map[string]string{
+				"provided_amount":   fmt.Sprintf("%d", req.Amount),
+				"required_amount":   fmt.Sprintf("%d", expectedAmount),
+				"week_number":       fmt.Sprintf("%d", firstUnpaidWeek),
+				"suggestion":        fmt.Sprintf("Pay exactly %d for week %d", expectedAmount, firstUnpaidWeek),
+			},
+		}
+	default:
+		return &BusinessError{
+			Message: "Payment processing failed",
+			Code:    "PAYMENT_FAILED",
+			Details: map[string]string{
+				"reason": errMsg,
+			},
+		}
 	}
 }
 

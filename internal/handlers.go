@@ -286,57 +286,21 @@ func PayLoanHandler(c echo.Context, repo domain.LoanRepository, service *domain.
 		))
 	}
 
-	// Find the first unpaid week index (1-based) before making payment
-	firstUnpaidWeek := 0
-	expectedAmount := int64(0)
-	for i, week := range loan.Schedule {
-		if !week.Paid {
-			firstUnpaidWeek = i + 1 // Convert to 1-based index
-			expectedAmount = week.Amount
-			break
-		}
-	}
-
-	now := time.Now().UTC()
-	domainReq := domain.PaymentRequest{
-		Amount: req.Amount,
-		Now:    now,
-	}
-
-	err = service.ProcessPayment(loan, domainReq)
-	if err != nil {
-		metrics.RecordBusinessError("payment_error", "pay_loan")
-		if err.Error() == "loan already fully paid" {
-			return c.JSON(http.StatusBadRequest, newBusinessError(
-				"Loan is already fully paid",
-				ErrCodeLoanAlreadyPaid,
-				map[string]string{
-					"loan_id":         id,
-					"paid_weeks":      fmt.Sprintf("%d", loan.PaidCount),
-					"total_weeks":     "50",
-					"outstanding":     fmt.Sprintf("%d", loan.Outstanding),
-					"suggestion":      "No further payments are required for this loan",
-				},
-			))
-		} else if err.Error() == "amount must equal this week's payable" {
-			return c.JSON(http.StatusBadRequest, newBusinessError(
-				"Payment amount does not match the required weekly amount",
-				ErrCodeIncorrectPaymentAmount,
-				map[string]string{
-					"provided_amount":   fmt.Sprintf("%d", req.Amount),
-					"required_amount":   fmt.Sprintf("%d", expectedAmount),
-					"week_number":       fmt.Sprintf("%d", firstUnpaidWeek),
-					"suggestion":        fmt.Sprintf("Pay exactly %d for week %d", expectedAmount, firstUnpaidWeek),
-				},
-			))
-		}
-		return c.JSON(http.StatusBadRequest, newBusinessError(
-			"Payment processing failed",
-			ErrCodePaymentFailed,
-			map[string]string{
-				"reason": err.Error(),
-			},
+	// Debug: check loan schedule
+	if len(loan.Schedule) == 0 {
+		return c.JSON(http.StatusInternalServerError, newSystemError(
+			"Loan schedule is empty",
+			ErrCodeDatabaseError,
+			"get_loan",
+			fmt.Errorf("loan %s has empty schedule", id),
 		))
+	}
+
+	// Delegate to domain service
+	now := time.Now().UTC()
+	response, err := service.ProcessPaymentFromRequest(loan, req.Amount, now)
+	if err != nil {
+		return handleDomainError(c, err)
 	}
 
 	// Update loan in database
@@ -350,18 +314,10 @@ func PayLoanHandler(c echo.Context, repo domain.LoanRepository, service *domain.
 		))
 	}
 
-	// Recompute outstanding after payment
-	remainingOutstanding := loan.GetOutstanding()
-
 	// Record successful payment metrics
 	metrics.RecordPaymentReceived(float64(req.Amount), "bank_transfer", "success")
 	metrics.RecordRevenue(float64(req.Amount))
 	metrics.RecordDatabaseQuery("update", "loans", time.Since(start))
-
-	response := PaymentResponse{
-		PaidWeek:             firstUnpaidWeek,
-		RemainingOutstanding: remainingOutstanding,
-	}
 
 	return c.JSON(http.StatusOK, response)
 }
@@ -499,7 +455,7 @@ func handleDomainError(c echo.Context, err error) error {
 			e.Details,
 		))
 	case *domain.BusinessError:
-		metrics.RecordBusinessError(e.Code, "create_loan")
+		metrics.RecordBusinessError(e.Code, "domain_operation")
 		return c.JSON(http.StatusBadRequest, newBusinessError(
 			e.Message,
 			e.Code,
@@ -509,7 +465,7 @@ func handleDomainError(c echo.Context, err error) error {
 		return c.JSON(http.StatusInternalServerError, newSystemError(
 			"Internal server error",
 			ErrCodeDatabaseError,
-			"create_loan",
+			"domain_operation",
 			err,
 		))
 	}

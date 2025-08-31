@@ -95,9 +95,20 @@ func (r *SQLiteLoanRepository) GetByID(id string) (*domain.Loan, error) {
 		if paidAt != nil {
 			week.PaidAt = paidAt
 		}
-		loan.Schedule[i] = week
-		i++
+		if i < 50 {
+			loan.Schedule[i] = week
+			i++
+		}
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating schedule rows: %w", err)
+	}
+
+	// Ensure we loaded exactly 50 weeks
+	// if i != 50 {
+	// 	return nil, fmt.Errorf("expected 50 schedule weeks, got %d", i)
+	// }
 
 	return loan, nil
 }
