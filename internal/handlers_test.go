@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"database/sql"
@@ -33,11 +33,11 @@ func setupTestServer() *echo.Echo {
 	service := domain.NewLoanService()
 
 	e := echo.New()
-	e.POST("/loans", func(c echo.Context) error { return createLoanHandler(c, repo, service) })
-	e.GET("/loans/:id", func(c echo.Context) error { return getLoanHandler(c, repo, service) })
-	e.POST("/loans/:id/pay", func(c echo.Context) error { return payLoanHandler(c, repo, service) })
-	e.GET("/loans/:id/outstanding", func(c echo.Context) error { return getOutstandingHandler(c, repo, service) })
-	e.GET("/loans/:id/delinquent", func(c echo.Context) error { return getDelinquencyHandler(c, repo, service) })
+	e.POST("/loans", func(c echo.Context) error { return CreateLoanHandler(c, repo, service) })
+	e.GET("/loans/:id", func(c echo.Context) error { return GetLoanHandler(c, repo, service) })
+	e.POST("/loans/:id/pay", func(c echo.Context) error { return PayLoanHandler(c, repo, service) })
+	e.GET("/loans/:id/outstanding", func(c echo.Context) error { return GetOutstandingHandler(c, repo, service) })
+	e.GET("/loans/:id/delinquent", func(c echo.Context) error { return GetDelinquencyHandler(c, repo, service) })
 	return e
 }
 

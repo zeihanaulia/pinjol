@@ -64,6 +64,9 @@ func (r *SQLiteLoanRepository) GetByID(id string) (*domain.Loan, error) {
 		FROM loans WHERE id = ?`, id).Scan(
 		&loan.ID, &loan.Principal, &loan.APR, &startDateStr, &loan.WeeklyDue, &loan.PaidCount, &loan.Outstanding)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrLoanNotFound
+		}
 		return nil, fmt.Errorf("failed to get loan: %w", err)
 	}
 
@@ -224,6 +227,11 @@ func InitDatabase(db *sql.DB) error {
 	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_loan_schedule_loan_id ON loan_schedule(loan_id)`)
 	if err != nil {
 		return fmt.Errorf("failed to create index on loan_schedule: %w", err)
+	}
+
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_loans_start_date ON loans(start_date)`)
+	if err != nil {
+		return fmt.Errorf("failed to create index on loans start_date: %w", err)
 	}
 
 	return nil
