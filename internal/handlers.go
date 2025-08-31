@@ -1,10 +1,8 @@
 package internal
 
 import (
-	"encoding/base32"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -134,123 +132,24 @@ func CreateLoanHandler(c echo.Context, repo domain.LoanRepository, service *doma
 		))
 	}
 
-	// Parse start date
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	// Delegate to domain service
+	response, err := service.CreateLoanFromRequest(req.Principal, req.AnnualRate, req.StartDate)
 	if err != nil {
-		metrics.ValidationErrors.WithLabelValues("start_date", "invalid_format").Inc()
-		return c.JSON(http.StatusBadRequest, newValidationError(
-			"start_date",
-			"Start date format is invalid",
-			ErrCodeInvalidStartDateFormat,
-			map[string]string{
-				"provided":   req.StartDate,
-				"required":   "YYYY-MM-DD format",
-				"example":    "2025-08-31",
-				"validation": "Must be a valid date in the future or today",
-			},
-		))
-	}
-
-	// Default annual rate
-	if req.AnnualRate == 0 {
-		req.AnnualRate = 0.10
-	}
-
-	domainReq := domain.CreateLoanRequest{
-		Principal:  req.Principal,
-		AnnualRate: req.AnnualRate,
-		StartDate:  startDate,
-	}
-
-	// Validate using domain service
-	if err := service.ValidateCreateLoanRequest(domainReq); err != nil {
-		// Map errors to appropriate codes
-		if req.Principal <= 0 {
-			metrics.ValidationErrors.WithLabelValues("principal", "invalid_value").Inc()
-			return c.JSON(http.StatusBadRequest, newValidationError(
-				"principal",
-				"Principal amount must be greater than 0",
-				ErrCodeInvalidPrincipal,
-				map[string]string{
-					"provided":  fmt.Sprintf("%d", req.Principal),
-					"required":  "Must be a positive integer greater than 0",
-					"min_value": "1",
-					"max_value": "5000000 (5 million)",
-				},
-			))
-		}
-		if req.Principal > 5_000_000 {
-			metrics.ValidationErrors.WithLabelValues("principal", "unsupported_product").Inc()
-			return c.JSON(http.StatusBadRequest, newValidationError(
-				"principal",
-				"Principal amount exceeds maximum allowed limit",
-				ErrCodePrincipalTooHigh,
-				map[string]string{
-					"provided": fmt.Sprintf("%d", req.Principal),
-					"maximum":  "5000000 (5 million)",
-					"reason":   "Higher amounts may not result in integral weekly payments",
-				},
-			))
-		}
-		if req.AnnualRate < 0 {
-			metrics.ValidationErrors.WithLabelValues("annual_rate", "negative_value").Inc()
-			return c.JSON(http.StatusBadRequest, newValidationError(
-				"annual_rate",
-				"Annual rate cannot be negative",
-				ErrCodeInvalidAnnualRate,
-				map[string]string{
-					"provided":  fmt.Sprintf("%.2f", req.AnnualRate),
-					"required":  "Must be a non-negative decimal (0.00 - 0.50)",
-					"min_value": "0.00",
-					"max_value": "0.50 (50%)",
-				},
-			))
-		}
-		if req.AnnualRate > 0.50 {
-			metrics.ValidationErrors.WithLabelValues("annual_rate", "too_high").Inc()
-			return c.JSON(http.StatusBadRequest, newValidationError(
-				"annual_rate",
-				"Annual rate exceeds maximum allowed limit",
-				ErrCodeAnnualRateTooHigh,
-				map[string]string{
-					"provided": fmt.Sprintf("%.2f", req.AnnualRate),
-					"maximum":  "0.50 (50%)",
-					"reason":   "Higher rates may not result in integral weekly payments",
-				},
-			))
-		}
-		return c.JSON(http.StatusBadRequest, newBusinessError(
-			"Invalid loan parameters",
-			ErrCodeInvalidLoanParameters,
-			map[string]string{
-				"error": err.Error(),
-			},
-		))
-	}
-
-	// Generate unique ID
-	id := generateLoanID()
-
-	// Create loan using domain service
-	loan, err := service.CreateLoan(id, domainReq)
-	if err != nil {
-		metrics.RecordBusinessError("unsupported_product", "create_loan")
-		totalDue := int64(float64(req.Principal) * (1 + req.AnnualRate))
-		return c.JSON(http.StatusBadRequest, newBusinessError(
-			"Loan parameters result in non-integral weekly payments",
-			ErrCodeNonIntegralWeeklyPayment,
-			map[string]string{
-				"principal":   fmt.Sprintf("%d", req.Principal),
-				"annual_rate": fmt.Sprintf("%.2f", req.AnnualRate),
-				"total_due":   fmt.Sprintf("%d", totalDue),
-				"required":    "Total due amount must be divisible by 50 (weeks)",
-				"suggestion":  "Try adjusting the principal or annual rate",
-				"calculation": fmt.Sprintf("%d * (1 + %.2f) = %.0f (not divisible by 50)", req.Principal, req.AnnualRate, float64(totalDue)),
-			},
-		))
+		return handleDomainError(c, err)
 	}
 
 	// Store loan in database
+	loan := &domain.Loan{
+		ID:          response.ID,
+		Principal:   response.Principal,
+		APR:         response.APR,
+		StartDate:   response.StartDate,
+		WeeklyDue:   response.WeeklyDue,
+		Schedule:    convertResponseScheduleToDomain(response.Schedule),
+		PaidCount:   response.PaidCount,
+		Outstanding: response.Outstanding,
+	}
+
 	if err := repo.Create(loan); err != nil {
 		metrics.RecordBusinessError("database_error", "create_loan")
 		return c.JSON(http.StatusInternalServerError, newSystemError(
@@ -263,30 +162,8 @@ func CreateLoanHandler(c echo.Context, repo domain.LoanRepository, service *doma
 
 	// Record successful metrics
 	metrics.RecordLoanCreated("created", "individual")
-	metrics.LoanProcessingTime.Observe(time.Since(time.Now()).Seconds()) // Note: start time not accurate
 	metrics.ActiveLoans.Inc()
 	metrics.TotalBorrowers.Inc()
-
-	// Convert to response value object
-	var schedule [50]domain.WeekResponse
-	for i, w := range loan.Schedule {
-		schedule[i] = domain.WeekResponse{
-			Index:  w.Index,
-			Amount: w.Amount,
-			Paid:   w.Paid,
-			PaidAt: w.PaidAt,
-		}
-	}
-	response := domain.LoanResponse{
-		ID:          loan.ID,
-		Principal:   loan.Principal,
-		APR:         loan.APR,
-		StartDate:   loan.StartDate,
-		WeeklyDue:   loan.WeeklyDue,
-		Schedule:    schedule,
-		PaidCount:   loan.PaidCount,
-		Outstanding: loan.Outstanding,
-	}
 
 	return c.JSON(http.StatusCreated, response)
 }
@@ -610,9 +487,43 @@ func GetDelinquencyHandler(c echo.Context, repo domain.LoanRepository, service *
 	return c.JSON(http.StatusOK, response)
 }
 
-// generateLoanID generates a unique loan ID using base32 timestamp
-func generateLoanID() string {
-	timestamp := time.Now().UnixNano()
-	encoded := base32.StdEncoding.EncodeToString([]byte(strconv.FormatInt(timestamp, 36)))
-	return fmt.Sprintf("loan_%s", encoded[:8])
+// Helper methods for domain error handling
+func handleDomainError(c echo.Context, err error) error {
+	switch e := err.(type) {
+	case *domain.ValidationError:
+		metrics.ValidationErrors.WithLabelValues(e.Field, e.Code).Inc()
+		return c.JSON(http.StatusBadRequest, newValidationError(
+			e.Field,
+			e.Message,
+			e.Code,
+			e.Details,
+		))
+	case *domain.BusinessError:
+		metrics.RecordBusinessError(e.Code, "create_loan")
+		return c.JSON(http.StatusBadRequest, newBusinessError(
+			e.Message,
+			e.Code,
+			e.Details,
+		))
+	default:
+		return c.JSON(http.StatusInternalServerError, newSystemError(
+			"Internal server error",
+			ErrCodeDatabaseError,
+			"create_loan",
+			err,
+		))
+	}
+}
+
+func convertResponseScheduleToDomain(schedule [50]domain.WeekResponse) [50]domain.Week {
+	var result [50]domain.Week
+	for i, w := range schedule {
+		result[i] = domain.Week{
+			Index:  w.Index,
+			Amount: w.Amount,
+			Paid:   w.Paid,
+			PaidAt: w.PaidAt,
+		}
+	}
+	return result
 }
