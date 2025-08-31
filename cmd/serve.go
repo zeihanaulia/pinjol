@@ -41,6 +41,7 @@ func init() {
 	serveCmd.Flags().String("log-output", "stdout", "Log output")
 
 	viper.BindPFlags(serveCmd.Flags())
+	viper.BindEnv("db-path", "DATABASE_PATH")
 }
 
 func runServer() {

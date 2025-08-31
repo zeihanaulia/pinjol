@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -25,6 +27,10 @@ func Execute() {
 }
 
 func init() {
+	// Configure Viper to read environment variables
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+
 	// Add subcommands here
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(dbInitCmd)

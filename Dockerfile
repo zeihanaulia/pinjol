@@ -30,9 +30,15 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
     .
 
 # ================================
-# Runtime Stage (Distroless)
+# Runtime Stage (Alpine)
 # ================================
-FROM gcr.io/distroless/cc-debian12:latest
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
+
+# Create app directory
+RUN mkdir -p /app
 
 # Copy the statically linked binary
 COPY --from=builder /build/pinjol /pinjol
@@ -40,17 +46,20 @@ COPY --from=builder /build/pinjol /pinjol
 # Environment variables
 ENV PORT=8080 \
     APP_ENV=prod \
-    DATABASE_PATH=/tmp/pinjol.db
+    DATABASE_PATH=/app/pinjol.db
 
 # Expose port
 EXPOSE 8080
 
 # Health check (using the binary itself)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["/pinjol"] || exit 1
+    CMD ["/pinjol", "serve", "--help"] || exit 1
 
-# Run as non-root user (distroless nonroot user)
-USER nonroot
+# Run as non-root user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+USER appuser
 
-# Set the entrypoint
+# Set the entrypoint and default command
 ENTRYPOINT ["/pinjol"]
+CMD ["serve"]

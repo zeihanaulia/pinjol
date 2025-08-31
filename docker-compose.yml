@@ -12,11 +12,11 @@ services:
     environment:
       - PORT=8080
       - APP_ENV=prod
-      - DATABASE_PATH=/tmp/pinjol.db
+      - DATABASE_PATH=/app/pinjol.db
       - LOG_OUTPUT=stdout
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "/pinjol"]
+      test: ["CMD", "/pinjol", "serve", "--help"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -25,16 +25,14 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:rw,size=100m
     volumes:
-      - pinjol_logs:/var/log/pinjol:rw
+      - ./data:/app:rw
     user: root
     networks:
       - monitoring
 
 volumes:
-  pinjol_data:
-    driver: local
   pinjol_logs:
     driver: local
 
