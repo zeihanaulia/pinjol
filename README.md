@@ -7,14 +7,18 @@ Aplikasi manajemen pinjaman (Pinjol) dengan observability stack lengkap untuk mo
 - ✅ **Loan Management**: Create, track, and manage loans with flat interest calculation
 - ✅ **Payment Processing**: Weekly payment tracking with delinquency monitoring
 - ✅ **REST API**: Clean REST endpoints for all operations
+- ✅ **CLI Interface**: Command-line interface using Cobra framework
 - ✅ **SQLite Database**: Embedded database for data persistence
+- ✅ **Database Migrations**: Proper schema migration system
 - ✅ **Structured Logging**: JSON logging with Loki integration
 - ✅ **Metrics & Monitoring**: Prometheus metrics with Grafana dashboards
 - ✅ **Grafana Alloy**: Latest log aggregation replacing deprecated Promtail
 - ✅ **Business Dashboard**: Real-time business metrics and KPIs
 - ✅ **Smoke Test Simulation**: Realistic user behavior simulation
+- ✅ **Modular Architecture**: Clean separation of concerns with packages
 - ✅ **Docker Support**: Full containerization with docker-compose
 - ✅ **Nix Environment**: Reproducible development environment
+- ✅ **Comprehensive Testing**: Unit, integration, and smoke tests
 
 ## 🚀 Quick Start
 
@@ -31,14 +35,32 @@ nix develop
 # Initialize database
 make db-init
 
-# Start full development stack
-make dev-full
+# Start the application server
+make run
+
+# Or use the CLI command
+./pinjol serve
 
 # Access applications
 # - Pinjol App: http://localhost:8080
 # - Grafana: http://localhost:3000
 # - Prometheus: http://localhost:9090
 # - Loki: http://localhost:3100
+```
+
+### Using CLI Commands
+
+The application now uses a CLI-based approach with Cobra:
+
+```bash
+# Start the server
+./pinjol serve --port 8080 --env dev
+
+# Initialize database
+./pinjol db-init
+
+# Run CLI scenarios
+./pinjol scenario --scenario ontime --repeat 10
 ```
 
 ### Run Smoke Test Simulation
@@ -52,6 +74,9 @@ make simulation-30m
 
 # Custom simulation
 make simulation SIMULATION_DURATION=10m SIMULATION_USERS=8 SIMULATION_MAX_REQUESTS=30
+
+# Or use the wrapper script
+./run_simulation.sh -d 30m -u 5 -r 50
 ```
 
 ## 📊 Dashboards
@@ -127,21 +152,45 @@ GET /version
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Pinjol App    │    │   Prometheus     │    │     Grafana     │
+│   CLI Commands  │    │   HTTP Server   │    │  Domain Service │
+│   (cmd/)        │    │   (internal/)   │    │   (pkg/domain)  │
 │                 │    │                 │    │                 │
-│ - REST API      │◄──►│ - Metrics       │◄──►│ - Dashboards    │
-│ - Business Logic│    │ - Alerting      │    │ - Visualization │
-│ - SQLite DB     │    │ - Targets       │    │ - Alerts        │
+│ - serve         │───▶│ - Handlers      │───▶│ - Business      │
+│ - db-init       │    │ - Middleware    │    │   Logic         │
+│ - scenario      │    │ - Routing       │    │ - Validation    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       ▲                     ▲
          ▼                       │                     │
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│     Loki        │    │   Alloy         │    │   Node          │
-│                 │    │                 │    │   Exporter      │
-│ - Log Storage   │◄──►│ - Log Shipping  │◄──►│ - System        │
-│ - Query Engine  │    │ - Relabeling    │    │   Metrics       │
+│   Repository    │    │   Database      │    │   Shared Libs   │
+│  (internal/)    │    │  (migrations/)  │    │    (pkg/)       │
+│                 │    │                 │    │                 │
+│ - SQLite        │◄──►│ - Schema        │◄──►│ - Logging       │
+│ - CRUD Ops      │    │ - Migrations    │    │ - Metrics       │
+│ - Transactions  │    │ - Seeds         │    │ - Monitoring    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
+
+### Architecture Overview
+
+**Modular Package Structure:**
+- **`cmd/`**: CLI commands using Cobra framework for command-line interface
+- **`internal/`**: Private application code (handlers, database operations)
+- **`pkg/domain/`**: Core business logic and domain models
+- **`pkg/common/`**: Shared utilities and common functionality
+- **`pkg/logging/`**: Structured logging with Loki integration
+- **`pkg/metrics/`**: Prometheus metrics collection
+- **`pkg/monitoring/`**: Application monitoring endpoints
+- **`pkg/profiling/`**: Performance profiling setup
+- **`migrations/`**: Database schema migrations
+- **`scripts/`**: Automation scripts for development and deployment
+
+**Clean Architecture Principles:**
+- **Dependency Injection**: Repository pattern with interface-based design
+- **Domain-Driven Design**: Business logic separated from infrastructure
+- **Layered Architecture**: Clear separation between CLI, HTTP, Domain, and Data layers
+- **Testability**: Each layer can be tested independently
+- **Modularity**: Shared packages can be reused across different parts of the application
 
 ## 📈 Monitoring Stack
 
@@ -193,21 +242,29 @@ The project includes CLI tools for testing various loan scenarios:
 #### On-time Payment Scenario
 ```bash
 make cli-ontime
+# Or: ./pinjol scenario --scenario ontime --repeat 10 --verbose
 ```
 
 #### Delinquency and Catch-up Scenario
 ```bash
 make cli-skip2
+# Or: ./pinjol scenario --scenario skip2 --verbose
 ```
 
 #### Full Payment Scenario
 ```bash
 make cli-fullpay
+# Or: ./pinjol scenario --scenario fullpay --verbose
 ```
 
 #### Custom CLI Usage
 ```bash
-go run . cli --scenario ontime --principal 5000000 --rate 0.10 --repeat 10 --verbose
+./pinjol scenario --scenario ontime --principal 5000000 --rate 0.10 --repeat 10 --verbose
+```
+
+#### Database Operations
+```bash
+./pinjol db-init --db-path ./data/pinjol.db
 ```
 
 ## 🐳 Docker Deployment
@@ -314,66 +371,125 @@ CREATE TABLE loans (
 
 ```plaintext
 .
-├── main.go              // Application bootstrap and routing
-├── handlers.go          // HTTP handlers (thin layer)
-├── loans.go             // Domain logic: loans, payments, delinquency
-├── middleware.go        // Request logging middleware
-├── config.go            // Environment variable helpers
-├── errors.go            // Error types and definitions
-├── version.go           // Version information structure
-├── cli.go               // CLI testing tools
-├── runner_spec.md       // Detailed specification document
-├── loans_test.go        // Unit tests for domain logic
-├── handlers_test.go     // Basic handler tests
-├── api_test.go          // API integration tests
-├── tests/               // Test directories
-├── scripts/             // Utility scripts
-├── docker/              // Docker configurations
-│   ├── monitoring/      // Monitoring stack setup
-│   └── ...
-├── internal/            // Internal packages
-├── pkg/                 // Shared packages
-├── cmd/                 // Command-line tools
-├── migrations/          // Database migrations
-├── Makefile             // Build and test commands
-├── Dockerfile           // Container configuration
-├── docker-compose.yml   // Container orchestration
-├── flake.nix            // Nix development environment
-└── README.md            // This file
+├── main.go                    // Application entry point (calls cmd.Execute())
+├── cmd/                       // CLI commands using Cobra
+│   ├── root.go               // Root CLI command
+│   ├── serve.go              // HTTP server command
+│   ├── dbinit.go             // Database initialization command
+│   ├── scenario.go           // CLI testing scenarios
+│   └── smoke/
+│       └── smoke_simulation.go // Smoke test simulation
+├── internal/                  // Internal application code
+│   ├── handlers.go           // HTTP handlers
+│   ├── database.go           // Database operations
+│   ├── handlers_test.go      // Handler tests
+│   ├── handlers_edge_test.go // Edge case tests
+│   └── database_test.go      // Database tests
+├── pkg/                      // Shared packages
+│   ├── common/               // Common utilities
+│   │   ├── config.go         // Configuration helpers
+│   │   ├── errors.go         // Common error types
+│   │   └── validation.go     // Validation utilities
+│   ├── domain/               // Business domain logic
+│   │   ├── loan.go           // Loan domain model
+│   │   ├── loan_service.go   // Loan business logic
+│   │   ├── repository.go     // Repository interface
+│   │   ├── errors.go         // Domain errors
+│   │   └── loan_test.go      // Domain tests
+│   ├── logging/              // Structured logging
+│   │   ├── echo.go           // Echo middleware
+│   │   └── logger.go         // Logger implementation
+│   ├── metrics/              // Prometheus metrics
+│   │   ├── metrics.go        // Metrics collection
+│   │   └── integration_example.go // Metrics examples
+│   ├── monitoring/           // Application monitoring
+│   │   └── monitoring.go     // Monitoring endpoints
+│   └── profiling/            // Performance profiling
+│       └── profiling.go      // Profiling setup
+├── migrations/               // Database migrations
+│   └── 001_create_tables.sql // Initial schema
+├── scripts/                  // Utility scripts
+│   ├── monitoring.sh         // Monitoring stack management
+│   ├── run_simulation.sh     // Simulation runner
+│   ├── test-dashboard.sh     // Dashboard testing
+│   └── test-logs.sh          // Log testing
+├── tests/                    // Integration tests
+│   ├── docker-compose.test.yml // Test environment
+│   └── integration/
+│       ├── fixtures.go       // Test data fixtures
+│       └── repository_test.go // Repository integration tests
+├── data/                     // Data directory
+│   └── pinjol.db             // SQLite database file
+├── docker/                   // Docker configurations
+│   └── monitoring/           // Monitoring stack
+├── smoke_simulation          // Smoke test binary
+├── pinjol                    // Main application binary
+├── coverage.out              // Test coverage output
+├── Dockerfile                // Container configuration
+├── docker-compose.yml        // Development orchestration
+├── flake.nix                 // Nix development environment
+├── Makefile                  // Build and development tasks
+├── go.mod & go.sum           // Go module files
+└── README.md                 // This file
 ```
 
 ## ⚡ Development Commands
 
 ```bash
-# Run application
-make run
-
-# Run tests
-make test
-make test-verbose
-make test-coverage
-
-# CLI tools
-make cli-ontime
-make cli-skip2
-make cli-fullpay
-
-# Build
-make build
-
-# Docker
-make docker
-make compose
+# Application
+make run                    # Start the application
+make build                  # Build the application
+make build-static           # Build static binary
 
 # Database
-make db-init
+make db-init               # Initialize database
+make db-migrate            # Run database migrations
+
+# Testing
+make test                  # Run all tests
+make test-verbose          # Run tests with verbose output
+make test-coverage         # Run tests with coverage
+make test-race             # Run tests with race detection
+
+# CLI Scenarios
+make cli-ontime            # Test on-time payment scenario
+make cli-skip2             # Test delinquency scenario
+make cli-fullpay           # Test full payment scenario
+
+# Simulation
+make simulation-5m         # 5-minute simulation
+make simulation-30m        # 30-minute simulation (recommended)
+make simulation-1h         # 1-hour simulation
+make simulation-custom     # Custom simulation parameters
+
+# Docker
+make docker-build          # Build Docker image
+make docker-run            # Run Docker container
+make compose               # Start with docker-compose
+make compose-detached      # Start in background
+make compose-down          # Stop containers
+make compose-logs          # View container logs
 
 # Monitoring
-make monitoring-start
-make monitoring-stop
+make monitoring-start      # Start monitoring stack
+make monitoring-stop       # Stop monitoring stack
+make monitoring-status     # Check monitoring status
+make monitoring-logs       # View monitoring logs
 
-# Lint (requires golangci-lint)
-make lint
+# Full Development Environment
+make dev-full              # Start everything (app + monitoring)
+make dev-stop              # Stop everything
+
+# Health Checks
+make health-check          # Check all services health
+
+# Code Quality
+make lint                  # Run linter
+make fmt                   # Format code
+make vet                   # Run go vet
+
+# Production
+make prod-build            # Production build with all checks
 ```
 
 ## 🚀 Performance Optimizations
@@ -443,27 +559,47 @@ Dalam industri fintech khususnya peer-to-peer lending (pinjol), diperlukan siste
 **Arsitektur yang Diambil:**
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   HTTP Handlers │───▶│  Domain Logic   │───▶│   Repository    │
-│   (Echo Routes) │    │   (loans.go)    │    │   (SQLite)      │
+│   CLI Commands  │    │   HTTP Server   │    │  Domain Service │
+│     (cmd/)      │───▶│   (internal/)   │───▶│  (pkg/domain)   │
+│                 │    │                 │    │                 │
+│ - serve         │    │ - Handlers      │    │ - Business      │
+│ - db-init       │    │ - Middleware    │    │   Logic         │
+│ - scenario      │    │ - Routing       │    │ - Validation    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-   RESTful API          Business Rules          Data Persistence
+         │                       ▲                     ▲
+         ▼                       │                     │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Repository    │    │   Database      │    │   Shared Libs   │
+│  (internal/)    │    │  (migrations/)  │    │    (pkg/)       │
+│                 │    │                 │    │                 │
+│ - SQLite        │◄──►│ - Schema        │◄──►│ - Logging       │
+│ - CRUD Ops      │    │ - Migrations    │    │ - Metrics       │
+│ - Transactions  │    │ - Seeds         │    │ - Monitoring    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 **Prinsip Desain:**
-- **Domain-Driven Design (DDD):** Logika bisnis inti dipisahkan di `loans.go` dengan struct `Loan` dan method-method seperti `MakePayment()`, `IsDelinquent()`
-- **Repository Pattern:** Abstraksi data access melalui interface `LoanRepository` dengan implementasi `SQLiteLoanRepository`
-- **Clean Architecture:** Handler hanya sebagai thin layer untuk HTTP, domain logic tidak bergantung pada framework
-- **Test-Driven Development:** Coverage >80% untuk komponen core, dengan unit test dan integration test
-- **Error Handling:** Custom error types (`ErrInvalidRequest`, `ErrAlreadyPaid`, dll.) untuk handling yang spesifik
+- **Modular Architecture**: Kode terorganisir dalam package terpisah (cmd/, internal/, pkg/)
+- **CLI-First Design**: Aplikasi menggunakan Cobra untuk command-line interface
+- **Domain-Driven Design (DDD):** Logika bisnis inti dipisahkan di `pkg/domain/`
+- **Repository Pattern:** Abstraksi data access melalui interface
+- **Clean Architecture:** Handler hanya sebagai thin layer untuk HTTP
+- **Dependency Injection:** Semua dependencies diinject melalui constructor
+- **Structured Logging:** Logging terstruktur dengan Loki integration
+- **Metrics Collection:** Prometheus metrics untuk monitoring
+- **Test-Driven Development:** Coverage >80% dengan unit dan integration tests
 
 **Teknologi Stack:**
 - **Go 1.24+:** Untuk performance dan concurrency
+- **Cobra:** CLI framework untuk command-line interface
 - **Echo Framework:** Lightweight HTTP router
 - **SQLite:** Embedded database untuk simplicity
 - **Nix:** Reproducible development environment
 - **Docker:** Containerization untuk deployment
+- **Prometheus:** Metrics collection
+- **Grafana:** Visualization dashboards
+- **Loki:** Log aggregation
+- **Grafana Alloy:** Log shipping (replacing Promtail)
 
 ### 3. Skenario Smoke Test
 
@@ -473,7 +609,7 @@ Dalam industri fintech khususnya peer-to-peer lending (pinjol), diperlukan siste
    ```bash
    nix develop
    make db-init
-   make run
+   ./pinjol serve &
    ```
 
 2. **Test Case 1: Pembuatan Pinjaman Normal**
@@ -506,9 +642,24 @@ Dalam industri fintech khususnya peer-to-peer lending (pinjol), diperlukan siste
 
 6. **Test Case 5: CLI Scenario Testing**
    ```bash
-   make cli-ontime    # Test pembayaran tepat waktu
-   make cli-skip2     # Test delinquency dan catch-up
-   make cli-fullpay   # Test pembayaran penuh
+   # Using CLI commands
+   ./pinjol scenario --scenario ontime --repeat 10 --verbose
+   ./pinjol scenario --scenario skip2 --verbose
+   ./pinjol scenario --scenario fullpay --verbose
+
+   # Or using make commands
+   make cli-ontime
+   make cli-skip2
+   make cli-fullpay
+   ```
+
+7. **Test Case 6: Smoke Test Simulation**
+   ```bash
+   # Run smoke test simulation
+   make simulation-30m
+
+   # Or use the CLI directly
+   CGO_ENABLED=1 go run ./cmd/smoke/smoke_simulation.go
    ```
 
 ### 4. Edge Cases dan Analisis
@@ -618,31 +769,25 @@ Expected: UNIQUE constraint failed error
 - **Multi-currency Support:** International expansion
 
 **Technical Debt & Refactoring:**
-- **Extract common utilities ke shared packages:**
-  - Buat package `pkg/common` untuk utilities seperti validation, formatting, dan error handling
-  - Extract database connection helpers ke `pkg/database`
-  - Buat shared middleware package untuk authentication dan logging
-  - Implementasi: `pkg/common/validation.go`, `pkg/database/connection.go`
+- **Package Organization:** Struktur package sudah diorganisir dengan baik (cmd/, internal/, pkg/)
+- **CLI Framework:** Implementasi Cobra untuk CLI yang robust
+- **Modular Design:** Kode terpisah dalam package yang dapat di-test secara independen
+- **Dependency Injection:** Semua dependencies menggunakan constructor injection
+- **Configuration Management:** Centralized configuration dengan Viper
+- **Error Handling:** Structured error handling dengan custom error types
+- **Logging & Monitoring:** Comprehensive logging dan metrics collection
+- **Database Migrations:** Proper migration system untuk schema changes
+- **Testing Strategy:** Unit tests, integration tests, dan smoke tests
+- **CI/CD Ready:** Makefile dengan semua commands untuk automation
 
-- **Implement circuit breaker pattern:**
-  - Tambahkan circuit breaker untuk database connections menggunakan library seperti `gobreaker`
-  - Implement fallback mechanisms untuk external API calls
-  - Add health check endpoints untuk monitoring circuit breaker status
-  - Konfigurasi threshold untuk failure detection dan recovery
-
-- **Add integration tests dengan database real:**
-  - Setup test database menggunakan Docker containers (PostgreSQL/MySQL)
-  - Implementasi test fixtures untuk data seeding
-  - Add database migration testing untuk schema changes
-  - Continuous integration dengan database testing di CI/CD pipeline
-
-- **Performance benchmarking dan profiling:**
-  - Implementasi pprof endpoints untuk CPU dan memory profiling
-  - Add benchmarking tests untuk critical paths (loan creation, payment processing)
-  - Database query optimization dengan EXPLAIN ANALYZE
-  - Load testing menggunakan tools seperti Apache Bench atau hey
-  - Monitoring response times dan throughput metrics
+**Current Architecture Benefits:**
+- **Scalability:** Modular design memungkinkan easy scaling
+- **Maintainability:** Clear separation of concerns
+- **Testability:** Each package dapat di-test independently
+- **Reusability:** Shared packages dapat digunakan di berbagai bagian aplikasi
+- **Observability:** Comprehensive monitoring dan logging
+- **Developer Experience:** CLI tools dan scripts untuk development workflow
 
 ---
 
-*Proyek ini mendemonstrasikan implementasi clean architecture dengan fokus pada domain logic yang solid, testing yang komprehensif, dan deployment yang reproducible menggunakan Nix dan Docker.*
+*Proyek ini mendemonstrasikan implementasi clean architecture dengan fokus pada domain logic yang solid, testing yang komprehensif, dan deployment yang reproducible menggunakan Nix dan Docker. Aplikasi telah di-restructure menjadi modular architecture dengan CLI framework, comprehensive monitoring, dan development workflow yang efisien.*
