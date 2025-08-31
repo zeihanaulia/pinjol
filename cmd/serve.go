@@ -100,6 +100,7 @@ func runServer() {
 	e.HideBanner = true
 	e.Use(middleware.Recover(), middleware.RequestID())
 	e.Use(logging.RequestLogger(logger))
+	e.Use(metrics.HTTPMetricsMiddleware()) // Add HTTP metrics middleware
 
 	// Setup profiling endpoints
 	profiling.SetupProfiling(e)

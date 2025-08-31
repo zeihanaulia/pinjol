@@ -1,9 +1,12 @@
 package metrics
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -128,6 +131,23 @@ var (
 		Help: "External API call duration",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"service", "method"})
+
+	// RED Metrics for HTTP Requests (Rate, Errors, Duration)
+	HTTPRequestTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Total number of HTTP requests",
+	}, []string{"method", "endpoint", "status_code"})
+
+	HTTPRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "http_request_duration_seconds",
+		Help: "HTTP request duration in seconds",
+		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0},
+	}, []string{"method", "endpoint"})
+
+	HTTPRequestsInFlight = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "http_requests_in_flight",
+		Help: "Number of HTTP requests currently being processed",
+	}, []string{"method", "endpoint"})
 )
 
 // RecordLoanCreated records a loan creation event
@@ -206,6 +226,79 @@ func getDurationRange(duration int) string {
 	default:
 		return "24+_months"
 	}
+}
+
+// RecordHTTPRequest records an HTTP request with method, endpoint, status code, and duration
+func RecordHTTPRequest(method, endpoint, statusCode string, duration time.Duration) {
+	HTTPRequestTotal.WithLabelValues(method, endpoint, statusCode).Inc()
+	HTTPRequestDuration.WithLabelValues(method, endpoint).Observe(duration.Seconds())
+}
+
+// RecordHTTPRequestStart records the start of an HTTP request (increments in-flight counter)
+func RecordHTTPRequestStart(method, endpoint string) {
+	HTTPRequestsInFlight.WithLabelValues(method, endpoint).Inc()
+}
+
+// RecordHTTPRequestEnd records the end of an HTTP request (decrements in-flight counter)
+func RecordHTTPRequestEnd(method, endpoint string) {
+	HTTPRequestsInFlight.WithLabelValues(method, endpoint).Dec()
+}
+
+// HTTPMetricsMiddleware returns an Echo middleware that records RED metrics
+func HTTPMetricsMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+			method := c.Request().Method
+			path := c.Request().URL.Path
+
+			// Normalize path for metrics (remove IDs and parameters)
+			endpoint := normalizeEndpoint(path)
+
+			// Record request start
+			RecordHTTPRequestStart(method, endpoint)
+
+			// Process request
+			err := next(c)
+
+			// Record request end
+			duration := time.Since(start)
+			statusCode := getStatusCode(c, err)
+			RecordHTTPRequest(method, endpoint, statusCode, duration)
+			RecordHTTPRequestEnd(method, endpoint)
+
+			return err
+		}
+	}
+}
+
+// normalizeEndpoint normalizes the endpoint path for metrics
+func normalizeEndpoint(path string) string {
+	// Replace IDs with placeholders
+	if strings.HasPrefix(path, "/loans/") {
+		parts := strings.Split(path, "/")
+		if len(parts) >= 3 {
+			// Replace loan ID with placeholder
+			if parts[2] != "" && parts[2] != " " {
+				parts[2] = ":id"
+			}
+			path = strings.Join(parts, "/")
+		}
+	}
+	return path
+}
+
+// getStatusCode extracts the status code from the response or error
+func getStatusCode(c echo.Context, err error) string {
+	if err != nil {
+		// Check if it's an HTTP error
+		if he, ok := err.(*echo.HTTPError); ok {
+			return fmt.Sprintf("%d", he.Code)
+		}
+		// Default to 500 for other errors
+		return "500"
+	}
+	return fmt.Sprintf("%d", c.Response().Status)
 }
 
 // GetPrometheusHandler returns the Prometheus metrics handler

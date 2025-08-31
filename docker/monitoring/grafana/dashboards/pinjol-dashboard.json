@@ -44,8 +44,8 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(http_requests_total[5m])",
-          "legendFormat": "Requests per second",
+          "expr": "sum(rate(http_requests_total[5m]))",
+          "legendFormat": "Total requests per second",
           "refId": "A"
         }
       ],
@@ -68,7 +68,7 @@
         },
         {
           "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
-          "legendFormat": "50th percentile",
+          "legendFormat": "50th percentile (median)",
           "refId": "B"
         }
       ],
@@ -85,8 +85,8 @@
       "type": "barchart",
       "targets": [
         {
-          "expr": "sum by (status) (rate(http_requests_total[5m]))",
-          "legendFormat": "{{status}}",
+          "expr": "sum(rate(http_requests_total[5m])) by (status_code)",
+          "legendFormat": "{{status_code}}",
           "refId": "A"
         }
       ],
