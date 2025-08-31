@@ -261,7 +261,7 @@ func PayLoanHandler(c echo.Context, repo domain.LoanRepository, service *domain.
 	}
 
 	// Record payment processing start time
-	start := time.Now()
+	// start := time.Now()
 
 	// Get loan from database
 	loan, err := repo.GetByID(id)
@@ -317,6 +317,7 @@ func PayLoanHandler(c echo.Context, repo domain.LoanRepository, service *domain.
 	// Record successful payment metrics
 	metrics.RecordPaymentReceived(float64(req.Amount), "bank_transfer", "success")
 	metrics.RecordRevenue(float64(req.Amount))
+	start := time.Now()
 	metrics.RecordDatabaseQuery("update", "loans", time.Since(start))
 
 	return c.JSON(http.StatusOK, response)

@@ -150,8 +150,8 @@ func (s *LoanService) ProcessPaymentFromRequest(loan *Loan, amount int64, now ti
 		}
 		// If no unpaid week found, this might indicate all weeks are paid or schedule is empty
 		return nil, &BusinessError{
-			Message: "No unpaid weeks found",
-			Code:    "NO_UNPAID_WEEKS",
+			Message: "Loan is already fully paid",
+			Code:    "LOAN_ALREADY_PAID",
 			Details: map[string]string{
 				"loan_id":     loan.ID,
 				"total_weeks": fmt.Sprintf("%d", totalWeeks),
@@ -199,8 +199,8 @@ type WeekResponse struct {
 
 // PaymentResponse represents the payment result
 type PaymentResponse struct {
-	PaidWeek             int
-	RemainingOutstanding int64
+	PaidWeek             int   `json:"paid_week"`
+	RemainingOutstanding int64 `json:"remaining_outstanding"`
 }
 
 // OutstandingResponse represents the outstanding amount
