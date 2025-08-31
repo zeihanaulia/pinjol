@@ -1,0 +1,259 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Log Volume by Job",
+      "type": "barchart",
+      "targets": [
+        {
+          "expr": "sum by (job) (count_over_time({job=~\".+\"} [1h]))",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "title": "Error Rate Over Time",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(count_over_time({level=\"error\"} [5m])[5m:5m])",
+          "legendFormat": "Error rate"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "id": 3,
+      "title": "Log Levels Distribution",
+      "type": "piechart",
+      "targets": [
+        {
+          "expr": "count by (level) (count_over_time({job=~\".+\"} [1h]))",
+          "legendFormat": "{{level}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "id": 4,
+      "title": "HTTP Request Logs",
+      "type": "logs",
+      "targets": [
+        {
+          "expr": "{job=\"pinjol\"} |~ \"(?i)(GET|POST|PUT|DELETE)\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 16,
+        "x": 8,
+        "y": 8
+      }
+    },
+    {
+      "id": 5,
+      "title": "Database Query Logs",
+      "type": "logs",
+      "targets": [
+        {
+          "expr": "{job=\"pinjol\"} |~ \"(?i)(SELECT|INSERT|UPDATE|DELETE)\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "id": 6,
+      "title": "Application Errors",
+      "type": "logs",
+      "targets": [
+        {
+          "expr": "{job=\"pinjol\", level=\"error\"} |~ \"(?i)(panic|error|exception|failed)\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      }
+    },
+    {
+      "id": 7,
+      "title": "Log Query Builder",
+      "type": "text",
+      "options": {
+        "content": "# Loki Query Examples for Pinjol\n\n## Common Log Queries\n```\n# All Pinjol logs\n{job=\"pinjol\"}\n\n# Error logs only\n{job=\"pinjol\", level=\"error\"}\n\n# Search for specific terms\n{job=\"pinjol\"} |~ \"(?i)database\"\n\n# HTTP requests\n{job=\"pinjol\"} |~ \"(?i)(GET|POST|PUT|DELETE)\"\n\n# Database operations\n{job=\"pinjol\"} |~ \"(?i)(SELECT|INSERT|UPDATE|DELETE)\"\n```\n\n## Advanced Queries\n```\n# Count errors per minute\ncount_over_time({job=\"pinjol\", level=\"error\"} [1m])\n\n# Rate of errors\nrate(count_over_time({job=\"pinjol\", level=\"error\"} [5m])[5m:5m])\n\n# Parse JSON logs\n{job=\"pinjol\"} | json | level == \"error\"\n\n# Filter by time\n{job=\"pinjol\"} | json | timestamp >= now() - 1h\n```\n\n## Useful Patterns\n- `|~ \"(?i)pattern\"` - Case insensitive regex\n- `| json` - Parse JSON formatted logs\n- `| line_format \"{{.field}}\"` - Format output\n- `+= \"label\"` - Add label to results\n- `| drop __field__` - Remove field from results",
+        "mode": "markdown"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      }
+    },
+    {
+      "id": 8,
+      "title": "Log Volume Trend",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "sum(rate(count_over_time({job=\"pinjol\"} [5m])[5m:5m]))",
+          "legendFormat": "Total log rate"
+        },
+        {
+          "expr": "sum(rate(count_over_time({job=\"pinjol\", level=\"error\"} [5m])[5m:5m]))",
+          "legendFormat": "Error log rate"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      }
+    },
+    {
+      "id": 9,
+      "title": "Top Error Messages",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "topk(10, count by (message) (count_over_time({job=\"pinjol\", level=\"error\"} [1h])))",
+          "legendFormat": "{{message}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      }
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 41,
+  "tags": ["pinjol", "logs", "loki", "observability"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "pinjol",
+          "value": "pinjol"
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Job",
+        "multi": false,
+        "name": "job",
+        "options": [
+          {
+            "selected": true,
+            "text": "pinjol",
+            "value": "pinjol"
+          },
+          {
+            "selected": false,
+            "text": "system",
+            "value": "system"
+          }
+        ],
+        "query": "pinjol,system",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Pinjol Loki Logs Overview",
+  "uid": "pinjol-loki-overview",
+  "version": 1
+}

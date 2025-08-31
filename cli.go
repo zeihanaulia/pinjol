@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"pinjol/pkg/domain"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -62,7 +63,7 @@ func runCLI() {
 	repo := NewSQLiteLoanRepository(db)
 
 	// Create loan
-	loan, err := NewLoan("cli-test", *principal, *rate, start)
+	loan, err := domain.NewLoan("cli-test", *principal, *rate, start)
 	if err != nil {
 		log.Fatalf("Failed to create loan: %v", err)
 	}

@@ -1,53 +1,276 @@
-# Pinjol
+# Pinjol - Loan Management System with Observability
 
-Pinjol is a billing engine for flat interest loans built using the Echo framework. This project demonstrates a flat project structure and includes a Nix development environment for easy reproducibility.
+Aplikasi manajemen pinjaman (Pinjol) dengan observability stack lengkap untuk monitoring dan alerting. Termasuk migrasi dari Promtail ke Grafana Alloy, business dashboard, dan smoke test simulation.
 
-## Features
+## ✨ Features
 
-- **Billing Engine**: 50-week flat interest loan management
-- **RESTful API**: Complete loan lifecycle management
-- **Payment Processing**: FIFO payment enforcement with exact amount validation
-- **Delinquency Detection**: Automatic calculation based on payment history
-- **Persistent Storage**: SQLite database with repository pattern
-- **CLI Testing Tools**: Command-line scenarios for testing loan behavior
-- **Middleware**: Request logging and error handling
-- **Dockerized**: Containerized deployment with volume persistence
-- **Nix-based**: Reproducible development environment
+- ✅ **Loan Management**: Create, track, and manage loans with flat interest calculation
+- ✅ **Payment Processing**: Weekly payment tracking with delinquency monitoring
+- ✅ **REST API**: Clean REST endpoints for all operations
+- ✅ **SQLite Database**: Embedded database for data persistence
+- ✅ **Structured Logging**: JSON logging with Loki integration
+- ✅ **Metrics & Monitoring**: Prometheus metrics with Grafana dashboards
+- ✅ **Grafana Alloy**: Latest log aggregation replacing deprecated Promtail
+- ✅ **Business Dashboard**: Real-time business metrics and KPIs
+- ✅ **Smoke Test Simulation**: Realistic user behavior simulation
+- ✅ **Docker Support**: Full containerization with docker-compose
+- ✅ **Nix Environment**: Reproducible development environment
 
-## Loan Product Specifications
+## 🚀 Quick Start
 
-- **Term**: 50 weeks
-- **Default Principal**: Rp 5,000,000
-- **Default Interest**: 10% p.a. (flat)
-- **Weekly Payment**: Constant amount (Rp 110,000 for default)
-- **Payment Order**: FIFO (First-In, First-Out) - no skipping weeks
-- **Delinquency**: Triggered when latest 2 scheduled weeks are unpaid
-
-## Prerequisites
-
-- [Nix](https://nixos.org/): A tool for reproducible builds and development environments.
-
-## Installing Nix
-
-To install Nix, follow the instructions below or visit the [Zero to Nix](https://zero-to-nix.com/start/install/) website for more details.
-
-Run the following command to install Nix:
+### Development Environment
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+# Clone repository
+git clone <repository-url>
+cd pinjol
+
+# Setup development environment (Nix)
+nix develop
+
+# Initialize database
+make db-init
+
+# Start full development stack
+make dev-full
+
+# Access applications
+# - Pinjol App: http://localhost:8080
+# - Grafana: http://localhost:3000
+# - Prometheus: http://localhost:9090
+# - Loki: http://localhost:3100
 ```
 
-After installation, open a new terminal session to ensure the `nix` command is available.
+### Run Smoke Test Simulation
 
-## Getting Started
+```bash
+# Quick 5-minute simulation
+make simulation-5m
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd pinjol
-   ```
+# Standard 30-minute simulation
+make simulation-30m
 
-2. Enter the Nix development shell:
+# Custom simulation
+make simulation SIMULATION_DURATION=10m SIMULATION_USERS=8 SIMULATION_MAX_REQUESTS=30
+```
+
+## 📊 Dashboards
+
+### Business Dashboard
+Monitor business metrics dan KPIs:
+- Total active loans
+- Revenue tracking
+- Overdue loans
+- Payment success rates
+
+**URL**: http://localhost:3000/d/pinjol-business-dashboard
+
+### Logs Dashboard
+Monitor application logs dan errors:
+- Log volume by level
+- Error trends
+- Recent error logs
+- Application activity logs
+
+**URL**: http://localhost:3000/d/pinjol-logs-dashboard
+
+### Application Dashboard
+Monitor system performance:
+- Go runtime metrics
+- Database statistics
+- HTTP request metrics
+- System health
+
+**URL**: http://localhost:3000/d/pinjol-main-dashboard
+
+## 🛠️ API Endpoints
+
+### Loan Management
+```bash
+# Create loan
+POST /loans
+{
+  "principal": 5000000,
+  "annual_rate": 0.12,
+  "start_date": "2025-01-01"
+}
+
+# Get loan details
+GET /loans/{id}
+
+# Make payment
+POST /loans/{id}/pay
+{
+  "amount": 100000
+}
+
+# Get outstanding amount
+GET /loans/{id}/outstanding
+
+# Check delinquency status
+GET /loans/{id}/delinquent
+```
+
+### System Endpoints
+```bash
+# Health check
+GET /healthz
+
+# Application metrics
+GET /metrics
+
+# Version info
+GET /version
+```
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Pinjol App    │    │   Prometheus     │    │     Grafana     │
+│                 │    │                 │    │                 │
+│ - REST API      │◄──►│ - Metrics       │◄──►│ - Dashboards    │
+│ - Business Logic│    │ - Alerting      │    │ - Visualization │
+│ - SQLite DB     │    │ - Targets       │    │ - Alerts        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       ▲                     ▲
+         ▼                       │                     │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│     Loki        │    │   Alloy         │    │   Node          │
+│                 │    │                 │    │   Exporter      │
+│ - Log Storage   │◄──►│ - Log Shipping  │◄──►│ - System        │
+│ - Query Engine  │    │ - Relabeling    │    │   Metrics       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+## 📈 Monitoring Stack
+
+### Metrics Collected
+- **Business Metrics**: Loans created, payments processed, revenue
+- **Performance Metrics**: Response times, database queries, cache hits
+- **System Metrics**: CPU, memory, disk, network
+- **Application Metrics**: Goroutines, GC stats, heap usage
+
+### Log Aggregation
+- **Application Logs**: Structured JSON logs with context
+- **Error Logs**: Detailed error information with stack traces
+- **Audit Logs**: User actions and system events
+- **Performance Logs**: Slow queries and bottlenecks
+
+## 🧪 Testing
+
+### Unit Tests
+```bash
+make test-unit
+```
+
+### API Tests
+```bash
+make test-api
+```
+
+### Smoke Test Simulation
+```bash
+# Various simulation presets
+make simulation-5m   # 5 minutes
+make simulation-30m  # 30 minutes (recommended)
+make simulation-1h   # 1 hour
+
+# Custom simulation
+make simulation SIMULATION_DURATION=15m SIMULATION_USERS=10
+```
+
+### Load Testing
+```bash
+# Using the simulation script directly
+./run_simulation.sh -d 30m -u 20 -r 100
+```
+
+## 🐳 Docker Deployment
+
+### Development
+```bash
+# Build and run with docker-compose
+make compose
+
+# Run in detached mode
+make compose-detached
+
+# View logs
+make compose-logs
+```
+
+### Production
+```bash
+# Build optimized image
+make prod-build
+
+# Push to registry
+make docker-push
+```
+
+## 📚 Documentation
+
+- [API Documentation](./API.md)
+- [Business Dashboard Guide](./BUSINESS_DASHBOARD_README.md)
+- [Smoke Test Guide](./SMOKE_TEST_README.md)
+- [Monitoring Setup](./monitoring/README.md)
+
+## 🔧 Configuration
+
+### Environment Variables
+```bash
+# Application
+PORT=8080
+APP_ENV=production
+DATABASE_PATH=/data/pinjol.db
+LOG_LEVEL=info
+
+# Simulation (for smoke tests)
+SIMULATION_DURATION=30m
+SIMULATION_USERS=5
+SIMULATION_MAX_REQUESTS=50
+PINJOL_URL=http://localhost:8081
+```
+
+### Database Schema
+```sql
+-- Loans table
+CREATE TABLE loans (
+    id TEXT PRIMARY KEY,
+    principal INTEGER NOT NULL,
+    annual_rate REAL NOT NULL,
+    start_date TEXT NOT NULL,
+    weekly_due INTEGER NOT NULL,
+    schedule TEXT NOT NULL, -- JSON
+    paid_count INTEGER DEFAULT 0,
+    outstanding INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+For support and questions:
+- 📧 Email: support@pinjol.com
+- 📖 Documentation: [docs.pinjol.com](https://docs.pinjol.com)
+- 🐛 Issues: [GitHub Issues](https://github.com/pinjol/issues)
+
+---
+
+**Made with ❤️ for better loan management**
    ```bash
    nix develop
    ```

@@ -1,0 +1,208 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Application Health Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"pinjol\"}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "title": "HTTP Request Rate",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[5m])",
+          "legendFormat": "Requests per second",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      }
+    },
+    {
+      "id": 3,
+      "title": "HTTP Response Time",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "95th percentile",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "50th percentile",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      }
+    },
+    {
+      "id": 4,
+      "title": "HTTP Status Codes",
+      "type": "barchart",
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "id": 5,
+      "title": "Go Routines",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "go_goroutines",
+          "legendFormat": "Goroutines",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      }
+    },
+    {
+      "id": 6,
+      "title": "Memory Usage",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes / 1024 / 1024",
+          "legendFormat": "Memory (MB)",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      }
+    },
+    {
+      "id": 7,
+      "title": "Database Connections",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "go_sql_connections_open",
+          "legendFormat": "Open connections",
+          "refId": "A"
+        },
+        {
+          "expr": "go_sql_connections_in_use",
+          "legendFormat": "In use connections",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "id": 8,
+      "title": "GC Duration",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "go_gc_duration_seconds",
+          "legendFormat": "GC duration",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      }
+    },
+    {
+      "id": 9,
+      "title": "Application Overview",
+      "type": "text",
+      "options": {
+        "content": "# Pinjol Go Application Monitoring\n\nThis dashboard provides comprehensive monitoring of the Pinjol Go application performance and health.\n\n## Key Metrics:\n- **Application Health**: Service availability status\n- **HTTP Request Rate**: Incoming request volume\n- **Response Time**: Request processing latency\n- **Status Codes**: HTTP response distribution\n- **Go Routines**: Concurrent goroutine count\n- **Memory Usage**: Application memory consumption\n- **Database Connections**: DB connection pool status\n- **GC Duration**: Garbage collection performance\n\n## Performance Insights:\n- Monitor request throughput and latency\n- Track resource utilization\n- Identify performance bottlenecks\n- Analyze error patterns",
+        "mode": "markdown"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      }
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 41,
+  "tags": ["pinjol", "go", "application"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Pinjol Go Application Dashboard",
+  "uid": "pinjol-main-dashboard",
+  "version": 1
+}

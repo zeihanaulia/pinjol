@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +13,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	_ "github.com/mattn/go-sqlite3"
+
+	"pinjol/pkg/logging"
+	"pinjol/pkg/monitoring"
+	"pinjol/pkg/profiling"
+	"pinjol/pkg/metrics"
+	"pinjol/pkg/domain"
 )
 
 var (
@@ -56,12 +61,19 @@ func mainServer() {
 	env := getEnv("APP_ENV", "dev")
 	dbPath := getEnv("DATABASE_PATH", "./pinjol.db")
 
-	var logger *slog.Logger
-	if env == "prod" {
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	} else {
-		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+	// Configure structured logging for Loki
+	logConfig := logging.Config{
+		Level:       getEnv("LOG_LEVEL", "info"),
+		Format:      getEnv("LOG_FORMAT", "json"), // Always use JSON for Loki
+		Output:      getEnv("LOG_OUTPUT", "stdout"),
+		AddSource:   env == "dev",
+		ServiceName: "pinjol",
 	}
+
+	logger := logging.NewLogger(logConfig)
+
+	// Initialize metrics
+	metrics.InitMetrics()
 
 	// Initialize database
 	db, err := sql.Open("sqlite3", dbPath)
@@ -85,6 +97,12 @@ func mainServer() {
 	// Create repository
 	repo := NewSQLiteLoanRepository(db)
 
+	// Create domain repository adapter
+	domainRepo := NewDomainLoanRepositoryAdapter(repo)
+
+	// Create domain service
+	service := domain.NewLoanService()
+
 	// Test database connection
 	if err := db.Ping(); err != nil {
 		logger.Error("failed to ping database", "err", err)
@@ -96,17 +114,26 @@ func mainServer() {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover(), middleware.RequestID())
-	e.Use(LogMiddleware(logger))
+	e.Use(logging.RequestLogger(logger))
+
+	// Setup profiling endpoints
+	profiling.SetupProfiling(e)
+
+	// Setup monitoring endpoints
+	monitoring.SetupMonitoring(e, db, version)
 
 	e.GET("/healthz", healthHandler)
 	e.GET("/version", versionHandler(version, buildTime))
 
+	// Metrics endpoint
+	e.GET("/metrics", echo.WrapHandler(metrics.GetPrometheusHandler()))
+
 	// Loan endpoints with repository injection
-	e.POST("/loans", func(c echo.Context) error { return createLoanHandler(c, repo) })
-	e.GET("/loans/:id", func(c echo.Context) error { return getLoanHandler(c, repo) })
-	e.POST("/loans/:id/pay", func(c echo.Context) error { return payLoanHandler(c, repo) })
-	e.GET("/loans/:id/outstanding", func(c echo.Context) error { return getOutstandingHandler(c, repo) })
-	e.GET("/loans/:id/delinquent", func(c echo.Context) error { return getDelinquencyHandler(c, repo) })
+	e.POST("/loans", func(c echo.Context) error { return createLoanHandler(c, domainRepo, service) })
+	e.GET("/loans/:id", func(c echo.Context) error { return getLoanHandler(c, domainRepo, service) })
+	e.POST("/loans/:id/pay", func(c echo.Context) error { return payLoanHandler(c, domainRepo, service) })
+	e.GET("/loans/:id/outstanding", func(c echo.Context) error { return getOutstandingHandler(c, domainRepo, service) })
+	e.GET("/loans/:id/delinquent", func(c echo.Context) error { return getDelinquencyHandler(c, domainRepo, service) })
 
 	addr := fmt.Sprintf(":%s", port)
 	go func() {

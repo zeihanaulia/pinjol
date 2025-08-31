@@ -1,0 +1,126 @@
+groups:
+  - name: pinjol_application
+    rules:
+      # Application Health
+      - alert: PinjolDown
+        expr: up{job="pinjol"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pinjol application is down"
+          description: "Pinjol has been down for more than 1 minute."
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="pinjol", status=~'5..'}[5m]) / rate(http_requests_total{job="pinjol"}[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }}% which is above 5% threshold."
+
+      # High Latency
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="pinjol"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency"
+          description: "95th percentile latency is {{ $value }}s which is above 2s threshold."
+
+      # Memory Usage High
+      - alert: HighMemoryUsage
+        expr: (1 - go_memstats_heap_idle_bytes{job="pinjol-go"} / go_memstats_heap_sys_bytes{job="pinjol-go"}) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% which is above 90% threshold."
+
+      # Goroutine Count High
+      - alert: HighGoroutineCount
+        expr: go_goroutines{job="pinjol-go"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High goroutine count"
+          description: "Number of goroutines is {{ $value }} which is above 1000 threshold."
+
+  - name: pinjol_system
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value }}% which is above 90% threshold."
+
+      # High Memory Usage
+      - alert: SystemHighMemoryUsage
+        expr: 100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High system memory usage"
+          description: "System memory usage is {{ $value }}% which is above 90% threshold."
+
+      # Low Disk Space
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100) < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk space available is {{ $value }}% which is below 10% threshold."
+
+      # System Load High
+      - alert: HighSystemLoad
+        expr: node_load1 > 4
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High system load"
+          description: "System load 1m is {{ $value }} which is above 4 threshold."
+
+  - name: pinjol_business
+    rules:
+      # Database Connection Issues
+      - alert: DatabaseConnectionIssues
+        expr: go_sql_connections_open{job="pinjol-go"} < go_sql_connections_in_use{job="pinjol-go"}
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection issues"
+          description: "Database connections are saturated."
+
+      # Circuit Breaker Open
+      - alert: CircuitBreakerOpen
+        expr: pinjol_circuit_breaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker is open"
+          description: "Circuit breaker for {{ $labels.service }} is in open state."
+
+      # Business Logic Errors
+      - alert: BusinessLogicErrors
+        expr: rate(pinjol_business_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High business logic errors"
+          description: "Business logic error rate is {{ $value }} per second."

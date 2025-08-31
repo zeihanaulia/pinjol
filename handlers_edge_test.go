@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"pinjol/pkg/common"
+	"pinjol/pkg/domain"
 )
 
 // E2) RFC3339 with timezone offset in ?now=
@@ -21,7 +23,7 @@ func TestDelinquencyWithTimezone(t *testing.T) {
 	createRec := httptest.NewRecorder()
 	e.ServeHTTP(createRec, createReq)
 
-	var loan Loan
+	var loan domain.Loan
 	if err := json.Unmarshal(createRec.Body.Bytes(), &loan); err != nil {
 		t.Fatalf("failed to unmarshal loan: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestFutureStartDatePaymentAPI(t *testing.T) {
 	createRec := httptest.NewRecorder()
 	e.ServeHTTP(createRec, createReq)
 
-	var loan Loan
+	var loan domain.Loan
 	if err := json.Unmarshal(createRec.Body.Bytes(), &loan); err != nil {
 		t.Fatalf("failed to unmarshal loan: %v", err)
 	}
@@ -101,7 +103,7 @@ func TestWrongAmountAfterPayments(t *testing.T) {
 	createRec := httptest.NewRecorder()
 	e.ServeHTTP(createRec, createReq)
 
-	var loan Loan
+	var loan domain.Loan
 	if err := json.Unmarshal(createRec.Body.Bytes(), &loan); err != nil {
 		t.Fatalf("failed to unmarshal loan: %v", err)
 	}
@@ -132,7 +134,7 @@ func TestWrongAmountAfterPayments(t *testing.T) {
 	if err := json.Unmarshal(payRec2.Body.Bytes(), &errorResp); err != nil {
 		t.Fatalf("failed to unmarshal error response: %v", err)
 	}
-	if errorResp["error"] != "amount must equal this week's payable" {
+	if errorResp["error"] != "Payment amount does not match the required weekly amount" {
 		t.Errorf("expected specific error message, got %q", errorResp["error"])
 	}
 
@@ -167,7 +169,7 @@ func TestAlreadyFullyPaid(t *testing.T) {
 	createRec := httptest.NewRecorder()
 	e.ServeHTTP(createRec, createReq)
 
-	var loan Loan
+	var loan domain.Loan
 	if err := json.Unmarshal(createRec.Body.Bytes(), &loan); err != nil {
 		t.Fatalf("failed to unmarshal loan: %v", err)
 	}
@@ -200,8 +202,8 @@ func TestAlreadyFullyPaid(t *testing.T) {
 	if err := json.Unmarshal(payRec51.Body.Bytes(), &errorResp); err != nil {
 		t.Fatalf("failed to unmarshal error response: %v", err)
 	}
-	if errorResp["error"] != "loan already fully paid" {
-		t.Errorf("expected 'loan already fully paid', got %q", errorResp["error"])
+	if errorResp["error"] != "Loan is already fully paid" {
+		t.Errorf("expected 'Loan is already fully paid', got %q", errorResp["error"])
 	}
 }
 
@@ -220,7 +222,7 @@ func TestDefaultAnnualRate(t *testing.T) {
 		t.Fatalf("expected loan creation to succeed, got status %d", createRec.Code)
 	}
 
-	var loan Loan
+	var loan domain.Loan
 	if err := json.Unmarshal(createRec.Body.Bytes(), &loan); err != nil {
 		t.Fatalf("failed to unmarshal loan: %v", err)
 	}
@@ -245,28 +247,26 @@ func TestInvalidNowParsing(t *testing.T) {
 	createRec := httptest.NewRecorder()
 	e.ServeHTTP(createRec, createReq)
 
-	var loan Loan
+	var loan domain.Loan
 	if err := json.Unmarshal(createRec.Body.Bytes(), &loan); err != nil {
 		t.Fatalf("failed to unmarshal loan: %v", err)
 	}
 
-	// Test with invalid ?now= parameter - should ignore and use server time
+	// Test with invalid ?now= parameter - should return 400
 	req := httptest.NewRequest(http.MethodGet, "/loans/"+loan.ID+"/delinquent?now=not-a-date", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200 despite invalid now param, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 for invalid now param, got %d", rec.Code)
 	}
 
-	var resp DelinquencyResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
+	var errorResp common.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &errorResp); err != nil {
+		t.Fatalf("failed to unmarshal error response: %v", err)
 	}
-
-	// Should have used server time and calculated correct observed week
-	if resp.ObservedWeek == 0 {
-		t.Errorf("expected valid observed week despite invalid now param, got %d", resp.ObservedWeek)
+	if errorResp.Error != "Invalid 'now' query parameter format" {
+		t.Errorf("expected 'Invalid 'now' query parameter format', got %q", errorResp.Error)
 	}
 }
 
@@ -284,13 +284,13 @@ func TestInvalidCreatePayloads(t *testing.T) {
 			name:           "negative principal",
 			body:           `{"principal": -1, "annual_rate": 0.10, "start_date": "2025-08-01"}`,
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid request",
+			expectedError:  "Principal amount must be greater than 0",
 		},
 		{
 			name:           "bad date format",
 			body:           `{"principal": 5000000, "annual_rate": 0.10, "start_date": "2025-13-40"}`,
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid request",
+			expectedError:  "Start date format is invalid",
 		},
 	}
 

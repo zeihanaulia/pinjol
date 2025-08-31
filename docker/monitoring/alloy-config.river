@@ -1,0 +1,37 @@
+// Grafana Alloy configuration for log shipping to Loki
+// This replaces the deprecated Promtail configuration
+
+// Define Loki endpoint
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// System logs
+loki.source.file "system" {
+  targets = [
+    {__path__ = "/var/log/auth.log", job = "system"},
+    {__path__ = "/var/log/kern.log", job = "system"},
+    {__path__ = "/var/log/syslog", job = "system"},
+    {__path__ = "/var/log/dpkg.log", job = "system"},
+  ]
+  forward_to = [loki.write.local.receiver]
+}
+
+// Pinjol application logs from file
+loki.source.file "pinjol_app" {
+  targets = [
+    {__path__ = "/var/log/pinjol/app.log", job = "pinjol"},
+  ]
+  forward_to = [loki.write.local.receiver]
+}
+
+// Docker container logs (JSON format)
+loki.source.docker "docker" {
+  host = "unix:///var/run/docker.sock"
+  targets = [
+    {__path__ = "/var/lib/docker/containers/*/*-json.log", job = "docker"},
+  ]
+  forward_to = [loki.write.local.receiver]
+}

@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   pinjol:
     build:
@@ -10,13 +8,12 @@ services:
     image: pinjol:latest
     container_name: pinjol-app
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
       - PORT=8080
       - APP_ENV=prod
       - DATABASE_PATH=/tmp/pinjol.db
-    volumes:
-      - pinjol_data:/tmp
+      - LOG_OUTPUT=stdout
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/pinjol"]
@@ -29,8 +26,19 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      - pinjol_logs:/var/log/pinjol:rw
+    user: root
+    networks:
+      - monitoring
 
 volumes:
   pinjol_data:
     driver: local
+  pinjol_logs:
     driver: local
+
+networks:
+  monitoring:
+    external: true
+    name: pinjol-monitoring_monitoring

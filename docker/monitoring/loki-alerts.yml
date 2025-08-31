@@ -1,0 +1,92 @@
+groups:
+  - name: pinjol_logs
+    rules:
+      # Alert when error rate exceeds threshold
+      - alert: HighErrorRate
+        expr: rate(count_over_time({job="pinjol", level="error"} [5m])[5m:5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: pinjol
+        annotations:
+          summary: "High error rate detected in Pinjol service"
+          description: "Error rate is {{ $value }} errors per second, which is above the threshold of 0.1"
+          runbook_url: "https://github.com/your-org/pinjol/runbooks/high-error-rate"
+
+      # Alert when application panics occur
+      - alert: ApplicationPanic
+        expr: count_over_time({job="pinjol"} |~ "(?i)panic" [1m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: pinjol
+        annotations:
+          summary: "Application panic detected in Pinjol service"
+          description: "A panic occurred in the Pinjol application"
+          runbook_url: "https://github.com/your-org/pinjol/runbooks/application-panic"
+
+      # Alert when database errors occur
+      - alert: DatabaseErrors
+        expr: count_over_time({job="pinjol"} |~ "(?i)(database|sqlite|sql).*error" [5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: pinjol
+        annotations:
+          summary: "Database errors detected in Pinjol service"
+          description: "Database-related errors are occurring"
+          runbook_url: "https://github.com/your-org/pinjol/runbooks/database-errors"
+
+      # Alert when HTTP 5xx errors exceed threshold
+      - alert: High5xxRate
+        expr: |
+          sum(rate(
+            count_over_time({job="pinjol"} |~ "status.*5[0-9][0-9]" [5m])[5m:5m]
+          )) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: pinjol
+        annotations:
+          summary: "High 5xx error rate in Pinjol service"
+          description: "5xx error rate is {{ $value }} per second"
+          runbook_url: "https://github.com/your-org/pinjol/runbooks/high-5xx-rate"
+
+      # Alert when no logs received for extended period
+      - alert: LogSilence
+        expr: |
+          sum(count_over_time({job="pinjol"} [10m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: pinjol
+        annotations:
+          summary: "No logs received from Pinjol service"
+          description: "Pinjol service has not sent any logs for the last 10 minutes"
+          runbook_url: "https://github.com/your-org/pinjol/runbooks/log-silence"
+
+      # Alert on authentication failures
+      - alert: AuthFailures
+        expr: |
+          count_over_time({job="pinjol"} |~ "(?i)(unauthorized|forbidden|authentication.*failed)" [5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: pinjol
+        annotations:
+          summary: "Multiple authentication failures detected"
+          description: "There have been {{ $value }} authentication failures in the last 5 minutes"
+          runbook_url: "https://github.com/your-org/pinjol/runbooks/auth-failures"
+
+      # Alert on loan processing errors
+      - alert: LoanProcessingErrors
+        expr: |
+          count_over_time({job="pinjol"} |~ "(?i)(loan.*error|payment.*failed|processing.*error)" [5m]) > 0
+        for: 3m
+        labels:
+          severity: warning
+          service: pinjol
+        annotations:
+          summary: "Loan processing errors detected"
+          description: "Errors occurred during loan processing operations"
+          runbook_url: "https://github.com/your-org/pinjol/runbooks/loan-processing-errors"

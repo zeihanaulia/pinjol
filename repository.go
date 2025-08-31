@@ -6,14 +6,15 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"pinjol/pkg/domain"
 )
 
 // LoanRepository defines the interface for loan data persistence
 type LoanRepository interface {
-	Create(loan *Loan) error
-	GetByID(id string) (*Loan, error)
-	Update(loan *Loan) error
-	List() ([]*Loan, error)
+	Create(loan *domain.Loan) error
+	GetByID(id string) (*domain.Loan, error)
+	Update(loan *domain.Loan) error
+	List() ([]*domain.Loan, error)
 	Delete(id string) error
 }
 
@@ -28,7 +29,7 @@ func NewSQLiteLoanRepository(db *sql.DB) *SQLiteLoanRepository {
 }
 
 // Create inserts a new loan into the database
-func (r *SQLiteLoanRepository) Create(loan *Loan) error {
+func (r *SQLiteLoanRepository) Create(loan *domain.Loan) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -39,7 +40,7 @@ func (r *SQLiteLoanRepository) Create(loan *Loan) error {
 	_, err = tx.Exec(`
 		INSERT INTO loans (id, principal, apr, start_date, weekly_due, paid_count, outstanding)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		loan.ID, loan.Principal, loan.APR, loan.StartDate, loan.WeeklyDue, loan.PaidCount, loan.Outstanding)
+		loan.ID, loan.Principal, loan.APR, loan.StartDate.Format(time.RFC3339), loan.WeeklyDue, loan.PaidCount, loan.Outstanding)
 	if err != nil {
 		return fmt.Errorf("failed to insert loan: %w", err)
 	}
@@ -50,13 +51,12 @@ func (r *SQLiteLoanRepository) Create(loan *Loan) error {
 		if week.PaidAt != nil {
 			paidAt = week.PaidAt
 		}
-
 		_, err = tx.Exec(`
 			INSERT INTO loan_schedule (loan_id, week_index, amount, paid, paid_at)
 			VALUES (?, ?, ?, ?, ?)`,
 			loan.ID, week.Index, week.Amount, week.Paid, paidAt)
 		if err != nil {
-			return fmt.Errorf("failed to insert schedule for week %d: %w", week.Index, err)
+			return fmt.Errorf("failed to insert schedule: %w", err)
 		}
 	}
 
@@ -64,9 +64,8 @@ func (r *SQLiteLoanRepository) Create(loan *Loan) error {
 }
 
 // GetByID retrieves a loan by ID
-func (r *SQLiteLoanRepository) GetByID(id string) (*Loan, error) {
-	// Get loan
-	var loan Loan
+func (r *SQLiteLoanRepository) GetByID(id string) (*domain.Loan, error) {
+	loan := &domain.Loan{}
 	var startDateStr string
 	err := r.db.QueryRow(`
 		SELECT id, principal, apr, start_date, weekly_due, paid_count, outstanding
@@ -74,18 +73,18 @@ func (r *SQLiteLoanRepository) GetByID(id string) (*Loan, error) {
 		&loan.ID, &loan.Principal, &loan.APR, &startDateStr, &loan.WeeklyDue, &loan.PaidCount, &loan.Outstanding)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrLoanNotFound
+			return nil, domain.ErrLoanNotFound
 		}
 		return nil, fmt.Errorf("failed to get loan: %w", err)
 	}
 
 	// Parse start date
-	loan.StartDate, err = time.Parse("2006-01-02 15:04:05Z07:00", startDateStr)
+	loan.StartDate, err = time.Parse(time.RFC3339, startDateStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse start date: %w", err)
 	}
 
-	// Get schedule
+	// Load schedule
 	rows, err := r.db.Query(`
 		SELECT week_index, amount, paid, paid_at
 		FROM loan_schedule WHERE loan_id = ? ORDER BY week_index`, id)
@@ -95,9 +94,9 @@ func (r *SQLiteLoanRepository) GetByID(id string) (*Loan, error) {
 	defer rows.Close()
 
 	// Initialize schedule array
-	var schedule [50]Week
+	schedule := [50]domain.Week{}
 	for rows.Next() {
-		var week Week
+		var week domain.Week
 		var paidAt *time.Time
 		err := rows.Scan(&week.Index, &week.Amount, &week.Paid, &paidAt)
 		if err != nil {
@@ -108,13 +107,17 @@ func (r *SQLiteLoanRepository) GetByID(id string) (*Loan, error) {
 			schedule[week.Index-1] = week
 		}
 	}
-	loan.Schedule = schedule
 
-	return &loan, nil
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating schedule rows: %w", err)
+	}
+
+	loan.Schedule = schedule
+	return loan, nil
 }
 
-// Update updates an existing loan in the database
-func (r *SQLiteLoanRepository) Update(loan *Loan) error {
+// Update updates a loan in the database
+func (r *SQLiteLoanRepository) Update(loan *domain.Loan) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -123,88 +126,96 @@ func (r *SQLiteLoanRepository) Update(loan *Loan) error {
 
 	// Update loan
 	_, err = tx.Exec(`
-		UPDATE loans SET paid_count = ?, outstanding = ? WHERE id = ?`,
-		loan.PaidCount, loan.Outstanding, loan.ID)
+		UPDATE loans SET principal = ?, apr = ?, start_date = ?, weekly_due = ?, paid_count = ?, outstanding = ?
+		WHERE id = ?`,
+		loan.Principal, loan.APR, loan.StartDate.Format(time.RFC3339), loan.WeeklyDue, loan.PaidCount, loan.Outstanding, loan.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update loan: %w", err)
 	}
 
-	// Update schedule
+	// Update payments
 	for _, week := range loan.Schedule {
 		var paidAt *time.Time
 		if week.PaidAt != nil {
 			paidAt = week.PaidAt
 		}
-
 		_, err = tx.Exec(`
-			UPDATE loan_schedule SET paid = ?, paid_at = ? WHERE loan_id = ? AND week_index = ?`,
-			week.Paid, paidAt, loan.ID, week.Index)
+			UPDATE loan_schedule SET amount = ?, paid = ?, paid_at = ?
+			WHERE loan_id = ? AND week_index = ?`,
+			week.Amount, week.Paid, paidAt, loan.ID, week.Index)
 		if err != nil {
-			return fmt.Errorf("failed to update schedule for week %d: %w", week.Index, err)
+			return fmt.Errorf("failed to update payment: %w", err)
 		}
 	}
 
 	return tx.Commit()
 }
 
-// List returns all loans (for admin purposes)
-func (r *SQLiteLoanRepository) List() ([]*Loan, error) {
+// List lists all loans
+func (r *SQLiteLoanRepository) List() ([]*domain.Loan, error) {
 	rows, err := r.db.Query(`
 		SELECT id, principal, apr, start_date, weekly_due, paid_count, outstanding
-		FROM loans ORDER BY start_date DESC`)
+		FROM loans`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list loans: %w", err)
 	}
 	defer rows.Close()
 
-	var loans []*Loan
+	var loans []*domain.Loan
 	for rows.Next() {
-		var loan Loan
+		loan := &domain.Loan{}
 		var startDateStr string
 		err := rows.Scan(&loan.ID, &loan.Principal, &loan.APR, &startDateStr, &loan.WeeklyDue, &loan.PaidCount, &loan.Outstanding)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan loan row: %w", err)
+			return nil, fmt.Errorf("failed to scan loan: %w", err)
 		}
-
-		loan.StartDate, err = time.Parse("2006-01-02T15:04:05Z07:00", startDateStr)
+		loan.StartDate, err = time.Parse(time.RFC3339, startDateStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse start date: %w", err)
+			return nil, fmt.Errorf("failed to parse start_date: %w", err)
 		}
-
-		loans = append(loans, &loan)
+		loans = append(loans, loan)
 	}
 
 	return loans, nil
 }
 
-// Delete removes a loan from the database
+// Delete deletes a loan from the database
 func (r *SQLiteLoanRepository) Delete(id string) error {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
+	_, err := r.db.Exec(`DELETE FROM loans WHERE id = ?`, id)
+	return err
+}
 
-	// Delete schedule first (foreign key constraint)
-	_, err = tx.Exec("DELETE FROM loan_schedule WHERE loan_id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete schedule: %w", err)
-	}
+// DomainLoanRepositoryAdapter adapts the main repository to domain interface
+type DomainLoanRepositoryAdapter struct {
+	repo *SQLiteLoanRepository
+}
 
-	// Delete loan
-	result, err := tx.Exec("DELETE FROM loans WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete loan: %w", err)
-	}
+// NewDomainLoanRepositoryAdapter creates a new adapter
+func NewDomainLoanRepositoryAdapter(repo *SQLiteLoanRepository) *DomainLoanRepositoryAdapter {
+	return &DomainLoanRepositoryAdapter{repo: repo}
+}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
+// Create implements domain.LoanRepository
+func (a *DomainLoanRepositoryAdapter) Create(loan *domain.Loan) error {
+	return a.repo.Create(loan)
+}
 
-	if rowsAffected == 0 {
-		return ErrLoanNotFound
-	}
+// GetByID implements domain.LoanRepository
+func (a *DomainLoanRepositoryAdapter) GetByID(id string) (*domain.Loan, error) {
+	return a.repo.GetByID(id)
+}
 
-	return tx.Commit()
+// Update implements domain.LoanRepository
+func (a *DomainLoanRepositoryAdapter) Update(loan *domain.Loan) error {
+	return a.repo.Update(loan)
+}
+
+// List implements domain.LoanRepository
+func (a *DomainLoanRepositoryAdapter) List() ([]*domain.Loan, error) {
+	return a.repo.List()
+}
+
+// Delete implements domain.LoanRepository
+func (a *DomainLoanRepositoryAdapter) Delete(id string) error {
+	return a.repo.Delete(id)
 }
