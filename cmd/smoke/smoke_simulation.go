@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -26,9 +27,10 @@ type User struct {
 
 // Loan represents a loan created by user
 type Loan struct {
-	ID     string
-	Amount int64
-	Status string
+	ID        string
+	Amount    int64
+	WeeklyDue int64
+	Status    string
 }
 
 // SimulationConfig holds simulation configuration
@@ -185,9 +187,9 @@ func createLoan(config SimulationConfig, user *User) {
 		{3_000_000, 0.10}, // 3,300,000 / 50 = 66,000
 		{2_000_000, 0.10}, // 2,200,000 / 50 = 44,000
 		{4_000_000, 0.10}, // 4,400,000 / 50 = 88,000
-		{6_000_000, 0.10}, // 6,600,000 / 50 = 132,000
 		{5_000_000, 0.08}, // 5,400,000 / 50 = 108,000
 		{3_000_000, 0.08}, // 3,240,000 / 50 = 64,800
+		{1_000_000, 0.10}, // 1,100,000 / 50 = 22,000
 	}
 	
 	selected := goodLoans[rand.Intn(len(goodLoans))]
@@ -219,20 +221,28 @@ func createLoan(config SimulationConfig, user *User) {
 		json.NewDecoder(resp.Body).Decode(&loanResp)
 
 		loanID := ""
+		weeklyDue := int64(0)
 		if id, ok := loanResp["ID"].(string); ok {
 			loanID = id
 		}
+		if wd, ok := loanResp["WeeklyDue"].(float64); ok {
+			weeklyDue = int64(wd)
+		}
 
 		loan := Loan{
-			ID:     loanID,
-			Amount: principal,
-			Status: "active",
+			ID:        loanID,
+			Amount:    principal,
+			WeeklyDue: weeklyDue,
+			Status:    "active",
 		}
 		user.Loans = append(user.Loans, loan)
 
 		logActivity(user, fmt.Sprintf("✅ Created loan ID:%s Amount:Rp%d Rate:%.1f%%", loanID, principal, rate*100))
 	} else {
-		logActivity(user, fmt.Sprintf("❌ Failed to create loan: HTTP %d", resp.StatusCode))
+		// Read response body for error details
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+		logActivity(user, fmt.Sprintf("❌ Failed to create loan: HTTP %d - %s", resp.StatusCode, bodyString))
 	}
 }
 
@@ -244,8 +254,8 @@ func makePayment(config SimulationConfig, user *User) {
 	// Pick random loan
 	loan := user.Loans[rand.Intn(len(user.Loans))]
 
-	// Payment amount: weekly due amount (assume 50 weeks)
-	paymentAmount := loan.Amount / 50
+	// Use the actual WeeklyDue amount from loan
+	paymentAmount := loan.WeeklyDue
 
 	request := PaymentRequest{
 		Amount: paymentAmount,
@@ -264,7 +274,10 @@ func makePayment(config SimulationConfig, user *User) {
 	if resp.StatusCode == http.StatusOK {
 		logActivity(user, fmt.Sprintf("💰 Made payment for loan %s: Rp%d", loan.ID, paymentAmount))
 	} else {
-		logActivity(user, fmt.Sprintf("❌ Failed to make payment for loan %s: HTTP %d", loan.ID, resp.StatusCode))
+		// Read response body for error details
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+		logActivity(user, fmt.Sprintf("❌ Failed to make payment for loan %s: HTTP %d - %s", loan.ID, resp.StatusCode, bodyString))
 	}
 }
 

@@ -1,11 +1,21 @@
 package domain
 
 import (
-	"encoding/base32"
 	"fmt"
-	"strconv"
+	mathrand "math/rand"
+	"sync/atomic"
 	"time"
 )
+
+var (
+	// Global atomic counter to ensure uniqueness
+	loanIDCounter int64
+)
+
+func init() {
+	// Seed the random number generator to avoid generating the same sequence
+	mathrand.Seed(time.Now().UnixNano())
+}
 
 // LoanService handles business logic for loans
 type LoanService struct{}
@@ -409,7 +419,24 @@ func (s *LoanService) mapPaymentBusinessError(err error, loan *Loan, req Payment
 }
 
 func (s *LoanService) generateLoanID() string {
-	timestamp := time.Now().UnixNano()
-	encoded := base32.StdEncoding.EncodeToString([]byte(strconv.FormatInt(timestamp, 36)))
-	return fmt.Sprintf("loan_%s", encoded[:8])
+	// Get current date
+	now := time.Now()
+	year := now.Year()
+	month := now.Month()
+	day := now.Day()
+	
+	// Format as LOS/YYYY/MM/DD/SEQUENCE
+	counter := atomic.AddInt64(&loanIDCounter, 1)
+	// 8-digit zero-padded decimal counter
+	counterStr := fmt.Sprintf("%04d", counter)
+
+	// small "uuid-like" 8-digit hex suffix (using math/rand already imported)
+	randHex := fmt.Sprintf("%04x", mathrand.Int63()&0xffffffff)
+
+	// Format as LOS-YYYY-MM-DD-COUNTER-SUFFIX
+	generatedID := fmt.Sprintf("LOS-%04d-%02d-%02d-%s-%s", year, month, day, counterStr, randHex)
+	
+	fmt.Printf("[ID-GEN] Generated ID: %s\n", generatedID)
+	
+	return generatedID
 }

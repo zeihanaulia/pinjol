@@ -2,7 +2,9 @@ package internal
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -138,34 +140,79 @@ func CreateLoanHandler(c echo.Context, repo domain.LoanRepository, service *doma
 		return handleDomainError(c, err)
 	}
 
-	// Store loan in database
-	loan := &domain.Loan{
-		ID:          response.ID,
-		Principal:   response.Principal,
-		APR:         response.APR,
-		StartDate:   response.StartDate,
-		WeeklyDue:   response.WeeklyDue,
-		Schedule:    convertResponseScheduleToDomain(response.Schedule),
-		PaidCount:   response.PaidCount,
-		Outstanding: response.Outstanding,
+	// Store loan in database with retry for potential ID conflicts
+	maxRetries := 3
+	var lastErr error
+	
+	for i := 0; i < maxRetries; i++ {
+		log.Printf("[DEBUG] CreateLoan attempt %d for principal=%d, rate=%.2f", i+1, req.Principal, req.AnnualRate)
+		
+		// Generate new loan with fresh ID if this is a retry
+		if i > 0 {
+			log.Printf("[DEBUG] Retry %d: Generating new loan with fresh ID", i+1)
+			response, err = service.CreateLoanFromRequest(req.Principal, req.AnnualRate, req.StartDate)
+			if err != nil {
+				log.Printf("[ERROR] Retry %d: Failed to create loan from request: %v", i+1, err)
+				return handleDomainError(c, err)
+			}
+		}
+		
+		log.Printf("[DEBUG] Attempt %d: Using loan ID=%s", i+1, response.ID)
+		
+		loan := &domain.Loan{
+			ID:          response.ID,
+			Principal:   response.Principal,
+			APR:         response.APR,
+			StartDate:   response.StartDate,
+			WeeklyDue:   response.WeeklyDue,
+			Schedule:    convertResponseScheduleToDomain(response.Schedule),
+			PaidCount:   response.PaidCount,
+			Outstanding: response.Outstanding,
+		}
+
+		log.Printf("[DEBUG] Attempt %d: Calling repo.Create for loan ID=%s", i+1, loan.ID)
+		if err := repo.Create(loan); err != nil {
+			lastErr = err
+			errMsg := err.Error()
+			log.Printf("[ERROR] Attempt %d: repo.Create failed for loan ID=%s, error: %v", i+1, loan.ID, err)
+			
+			// Check if this looks like a constraint violation
+			isConstraintViolation := strings.Contains(errMsg, "UNIQUE constraint failed") || 
+									strings.Contains(errMsg, "duplicate key") ||
+									strings.Contains(errMsg, "already exists")
+			
+			if isConstraintViolation {
+				log.Printf("[WARN] Attempt %d: Detected constraint violation, will retry if attempts remaining", i+1)
+			}
+			
+			// If this looks like a constraint violation, retry
+			if i < maxRetries-1 && isConstraintViolation {
+				log.Printf("[INFO] Attempt %d: Retrying due to constraint violation", i+1)
+				continue
+			}
+			
+			// If not constraint violation or no more retries, break
+			log.Printf("[ERROR] Attempt %d: Breaking retry loop - constraint=%v, retriesLeft=%d", i+1, isConstraintViolation, maxRetries-1-i)
+			break
+		} else {
+			// Success - record metrics and return
+			log.Printf("[SUCCESS] Attempt %d: Loan created successfully with ID=%s", i+1, loan.ID)
+			metrics.RecordLoanCreated("created", "individual")
+			metrics.ActiveLoans.Inc()
+			metrics.TotalBorrowers.Inc()
+			return c.JSON(http.StatusCreated, response)
+		}
 	}
-
-	if err := repo.Create(loan); err != nil {
-		metrics.RecordBusinessError("database_error", "create_loan")
-		return c.JSON(http.StatusInternalServerError, newSystemError(
-			"Failed to save loan to database",
-			ErrCodeDatabaseError,
-			"create_loan",
-			err,
-		))
-	}
-
-	// Record successful metrics
-	metrics.RecordLoanCreated("created", "individual")
-	metrics.ActiveLoans.Inc()
-	metrics.TotalBorrowers.Inc()
-
-	return c.JSON(http.StatusCreated, response)
+	
+	// All retries failed
+	log.Printf("[FATAL] All %d attempts failed. Last error: %v", maxRetries, lastErr)
+	metrics.RecordBusinessError("database_error", "create_loan")
+	return c.JSON(http.StatusInternalServerError, newSystemError(
+		fmt.Sprintf("Failed to save loan to database after %d attempts: %v", maxRetries, lastErr),
+		ErrCodeDatabaseError,
+		"create_loan",
+		lastErr,
+	))
 }
 
 func GetLoanHandler(c echo.Context, repo domain.LoanRepository, service *domain.LoanService) error {

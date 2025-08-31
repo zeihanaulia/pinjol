@@ -15,7 +15,7 @@ scrape_configs:
   # Pinjol Application Metrics
   - job_name: 'pinjol'
     static_configs:
-      - targets: ['host.docker.internal:8080']
+      - targets: ['172.26.94.178:8081']
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 5s
@@ -30,9 +30,4 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
-  # Go Application (built-in Go metrics)
-  - job_name: 'pinjol-go'
-    static_configs:
-      - targets: ['host.docker.internal:8080']
-    metrics_path: '/debug/pprof/metrics'  # Custom endpoint we'll create
-    scrape_interval: 30s
+  # Remove pinjol-go job as it's not needed
