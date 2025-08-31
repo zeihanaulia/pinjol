@@ -186,6 +186,30 @@ make simulation SIMULATION_DURATION=15m SIMULATION_USERS=10
 ./run_simulation.sh -d 30m -u 20 -r 100
 ```
 
+### CLI Testing Tools
+
+The project includes CLI tools for testing various loan scenarios:
+
+#### On-time Payment Scenario
+```bash
+make cli-ontime
+```
+
+#### Delinquency and Catch-up Scenario
+```bash
+make cli-skip2
+```
+
+#### Full Payment Scenario
+```bash
+make cli-fullpay
+```
+
+#### Custom CLI Usage
+```bash
+go run . cli --scenario ontime --principal 5000000 --rate 0.10 --repeat 10 --verbose
+```
+
 ## 🐳 Docker Deployment
 
 ### Development
@@ -208,98 +232,6 @@ make prod-build
 # Push to registry
 make docker-push
 ```
-
-## 📚 Documentation
-
-- [API Documentation](./API.md)
-- [Business Dashboard Guide](./BUSINESS_DASHBOARD_README.md)
-- [Smoke Test Guide](./SMOKE_TEST_README.md)
-- [Monitoring Setup](./monitoring/README.md)
-
-## 🔧 Configuration
-
-### Environment Variables
-```bash
-# Application
-PORT=8080
-APP_ENV=production
-DATABASE_PATH=/data/pinjol.db
-LOG_LEVEL=info
-
-# Simulation (for smoke tests)
-SIMULATION_DURATION=30m
-SIMULATION_USERS=5
-SIMULATION_MAX_REQUESTS=50
-PINJOL_URL=http://localhost:8081
-```
-
-### Database Schema
-```sql
--- Loans table
-CREATE TABLE loans (
-    id TEXT PRIMARY KEY,
-    principal INTEGER NOT NULL,
-    annual_rate REAL NOT NULL,
-    start_date TEXT NOT NULL,
-    weekly_due INTEGER NOT NULL,
-    schedule TEXT NOT NULL, -- JSON
-    paid_count INTEGER DEFAULT 0,
-    outstanding INTEGER NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-For support and questions:
-- 📧 Email: support@pinjol.com
-- 📖 Documentation: [docs.pinjol.com](https://docs.pinjol.com)
-- 🐛 Issues: [GitHub Issues](https://github.com/pinjol/issues)
-
----
-
-**Made with ❤️ for better loan management**
-   ```bash
-   nix develop
-   ```
-
-3. Initialize the database:
-   ```bash
-   make db-init
-   ```
-
-4. Run the application:
-   ```bash
-   make run
-   ```
-
-5. Run tests:
-   ```bash
-   make test
-   ```
-
-## Database
-
-The application uses SQLite for data persistence. The database file is created automatically when you run `make db-init`. You can configure the database path using the `DATABASE_PATH` environment variable:
-
-```bash
-export DATABASE_PATH=./my-database.db
-make db-init
-```
-
-## Docker Setup
 
 ### Optimized Production Build (Recommended)
 
@@ -336,90 +268,49 @@ make docker
 docker run -p 8080:8080 -v pinjol_data:/data pinjol:dev
 ```
 
-## Performance Optimizations
+## 📚 Documentation
 
-### Build Time Optimizations:
-- **Docker layer caching** with dependency-first copying
-- **BuildKit support** for parallel builds
-- **Multi-stage builds** to reduce final image size
-- **Selective file copying** with .dockerignore
+- [API Documentation](./API.md)
+- [Business Dashboard Guide](./BUSINESS_DASHBOARD_README.md)
+- [Smoke Test Guide](./SMOKE_TEST_README.md)
+- [Monitoring Setup](./monitoring/README.md)
+- [Monitoring Guide](./monitoring/MONITORING_GUIDE.md)
+- [Production Deployment](./monitoring/PRODUCTION_DEPLOYMENT.md)
 
-### Runtime Optimizations:
-- **Static binary** with stripped symbols
-- **Minimal base image** (Distroless)
-- **Connection pooling** for database
-- **Optimized Go build flags** for performance
+## 🔧 Configuration
 
-### Security Features:
-- **Non-root execution**
-- **Read-only filesystem**
-- **Minimal attack surface**
-- **No shell in production image**
-
-## API Endpoints
-
-### Create Loan
+### Environment Variables
 ```bash
-POST /loans
-Content-Type: application/json
+# Application
+PORT=8080
+APP_ENV=production
+DATABASE_PATH=/data/pinjol.db
+LOG_LEVEL=info
 
-{
-  "principal": 5000000,
-  "annual_rate": 0.10,
-  "start_date": "2025-08-15"
-}
+# Simulation (for smoke tests)
+SIMULATION_DURATION=30m
+SIMULATION_USERS=5
+SIMULATION_MAX_REQUESTS=50
+PINJOL_URL=http://localhost:8081
 ```
 
-### Make Payment
-```bash
-POST /loans/{id}/pay
-Content-Type: application/json
-
-{
-  "amount": 110000
-}
+### Database Schema
+```sql
+-- Loans table
+CREATE TABLE loans (
+    id TEXT PRIMARY KEY,
+    principal INTEGER NOT NULL,
+    annual_rate REAL NOT NULL,
+    start_date TEXT NOT NULL,
+    weekly_due INTEGER NOT NULL,
+    schedule TEXT NOT NULL, -- JSON
+    paid_count INTEGER DEFAULT 0,
+    outstanding INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-### Check Outstanding Balance
-```bash
-GET /loans/{id}/outstanding
-```
-
-### Check Delinquency Status
-```bash
-GET /loans/{id}/delinquent[?now=YYYY-MM-DD]
-```
-
-### Get Loan Details
-```bash
-GET /loans/{id}
-```
-
-## CLI Testing Tools
-
-The project includes CLI tools for testing various loan scenarios:
-
-### On-time Payment Scenario
-```bash
-make cli-ontime
-```
-
-### Delinquency and Catch-up Scenario
-```bash
-make cli-skip2
-```
-
-### Full Payment Scenario
-```bash
-make cli-fullpay
-```
-
-### Custom CLI Usage
-```bash
-go run . cli --scenario ontime --principal 5000000 --rate 0.10 --repeat 10 --verbose
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```plaintext
 .
@@ -436,6 +327,14 @@ go run . cli --scenario ontime --principal 5000000 --rate 0.10 --repeat 10 --ver
 ├── handlers_test.go     // Basic handler tests
 ├── api_test.go          // API integration tests
 ├── tests/               // Test directories
+├── scripts/             // Utility scripts
+├── docker/              // Docker configurations
+│   ├── monitoring/      // Monitoring stack setup
+│   └── ...
+├── internal/            // Internal packages
+├── pkg/                 // Shared packages
+├── cmd/                 // Command-line tools
+├── migrations/          // Database migrations
 ├── Makefile             // Build and test commands
 ├── Dockerfile           // Container configuration
 ├── docker-compose.yml   // Container orchestration
@@ -443,7 +342,7 @@ go run . cli --scenario ontime --principal 5000000 --rate 0.10 --repeat 10 --ver
 └── README.md            // This file
 ```
 
-## Development Commands
+## ⚡ Development Commands
 
 ```bash
 # Run application
@@ -466,25 +365,61 @@ make build
 make docker
 make compose
 
+# Database
+make db-init
+
+# Monitoring
+make monitoring-start
+make monitoring-stop
+
 # Lint (requires golangci-lint)
 make lint
 ```
 
-## Architecture
+## 🚀 Performance Optimizations
 
-This billing engine follows these principles:
+### Build Time Optimizations:
+- **Docker layer caching** with dependency-first copying
+- **BuildKit support** for parallel builds
+- **Multi-stage builds** to reduce final image size
+- **Selective file copying** with .dockerignore
 
-- **Domain-Driven Design**: Core business logic in `loans.go`
-- **FIFO Payment Processing**: Strict order enforcement
-- **Deterministic Calculations**: No randomness, all math is exact
-- **UTC Time Handling**: All internal times use UTC
-- **Integer Amounts**: All monetary values are int64 rupiah (no floats)
-- **Structured Logging**: Request logging with correlation IDs
-- **Error Handling**: Specific error types for different failure modes
+### Runtime Optimizations:
+- **Static binary** with stripped symbols
+- **Minimal base image** (Distroless)
+- **Connection pooling** for database
+- **Optimized Go build flags** for performance
+
+### Security Features:
+- **Non-root execution**
+- **Read-only filesystem**
+- **Minimal attack surface**
+- **No shell in production image**
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+For support and questions:
+- 📧 Email: support@pinjol.com
+- 📖 Documentation: [docs.pinjol.com](https://docs.pinjol.com)
+- 🐛 Issues: [GitHub Issues](https://github.com/pinjol/issues)
 
 ---
 
-## Penjelasan
+**Made with ❤️ for better loan management**
+
+## Penjelasan (Indonesian Documentation)
 
 ### 1. Problem Statement
 
@@ -711,7 +646,3 @@ Expected: UNIQUE constraint failed error
 ---
 
 *Proyek ini mendemonstrasikan implementasi clean architecture dengan fokus pada domain logic yang solid, testing yang komprehensif, dan deployment yang reproducible menggunakan Nix dan Docker.*
-
-## License
-
-This project is licensed under the MIT License.
