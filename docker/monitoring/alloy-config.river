@@ -19,19 +19,40 @@ loki.source.file "system" {
   forward_to = [loki.write.local.receiver]
 }
 
-// Pinjol application logs from file
-loki.source.file "pinjol_app" {
-  targets = [
-    {__path__ = "/var/log/pinjol/app.log", job = "pinjol"},
-  ]
-  forward_to = [loki.write.local.receiver]
+// Docker container discovery
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
 }
 
-// Docker container logs (JSON format)
-loki.source.docker "docker" {
+// Relabeling for Docker containers
+discovery.relabel "docker_logs" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex = "/(.*)"
+    target_label = "service_name"
+  }
+}
+
+// Docker container logs
+loki.source.docker "containers" {
   host = "unix:///var/run/docker.sock"
-  targets = [
-    {__path__ = "/var/lib/docker/containers/*/*-json.log", job = "docker"},
-  ]
+  targets = discovery.docker.containers.targets
+  labels = {"platform" = "docker"}
+  relabel_rules = discovery.relabel.docker_logs.rules
+  forward_to = [loki.process.pinjol_json.receiver]
+}
+
+// Process Pinjol container logs - parse JSON
+loki.process "pinjol_json" {
+  stage.json {
+    expressions = {
+      time = "time",
+      level = "level",
+      msg = "msg",
+      service = "service"
+    }
+  }
   forward_to = [loki.write.local.receiver]
 }
