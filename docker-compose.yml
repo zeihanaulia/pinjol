@@ -1,10 +1,36 @@
 version: "3.9"
+
 services:
   pinjol:
-    build: .
-    image: pinjol:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    image: pinjol:latest
+    container_name: pinjol-app
     ports:
       - "8080:8080"
     environment:
-      - APP_ENV=dev
       - PORT=8080
+      - APP_ENV=prod
+      - DATABASE_PATH=/tmp/pinjol.db
+    volumes:
+      - pinjol_data:/tmp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/pinjol"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  pinjol_data:
+    driver: local
+    driver: local

@@ -129,7 +129,9 @@ func TestWrongAmountAfterPayments(t *testing.T) {
 	}
 
 	var errorResp map[string]string
-	json.Unmarshal(payRec2.Body.Bytes(), &errorResp)
+	if err := json.Unmarshal(payRec2.Body.Bytes(), &errorResp); err != nil {
+		t.Fatalf("failed to unmarshal error response: %v", err)
+	}
 	if errorResp["error"] != "amount must equal this week's payable" {
 		t.Errorf("expected specific error message, got %q", errorResp["error"])
 	}
@@ -146,7 +148,9 @@ func TestWrongAmountAfterPayments(t *testing.T) {
 	}
 
 	var payResp PaymentResponse
-	json.Unmarshal(payRec3.Body.Bytes(), &payResp)
+	if err := json.Unmarshal(payRec3.Body.Bytes(), &payResp); err != nil {
+		t.Fatalf("failed to unmarshal payment response: %v", err)
+	}
 	if payResp.PaidWeek != 2 {
 		t.Errorf("expected paid week 2, got %d", payResp.PaidWeek)
 	}
@@ -193,7 +197,9 @@ func TestAlreadyFullyPaid(t *testing.T) {
 	}
 
 	var errorResp map[string]string
-	json.Unmarshal(payRec51.Body.Bytes(), &errorResp)
+	if err := json.Unmarshal(payRec51.Body.Bytes(), &errorResp); err != nil {
+		t.Fatalf("failed to unmarshal error response: %v", err)
+	}
 	if errorResp["error"] != "loan already fully paid" {
 		t.Errorf("expected 'loan already fully paid', got %q", errorResp["error"])
 	}
@@ -301,7 +307,9 @@ func TestInvalidCreatePayloads(t *testing.T) {
 			}
 
 			var errorResp map[string]string
-			json.Unmarshal(rec.Body.Bytes(), &errorResp)
+			if err := json.Unmarshal(rec.Body.Bytes(), &errorResp); err != nil {
+				t.Fatalf("failed to unmarshal response: %v", err)
+			}
 			if errorResp["error"] != tt.expectedError {
 				t.Errorf("expected error %q, got %q", tt.expectedError, errorResp["error"])
 			}

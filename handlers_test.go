@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,15 +9,30 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func setupTestServer() *echo.Echo {
+	// Create in-memory database
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+
+	// Initialize schema
+	if err := InitDatabase(db); err != nil {
+		panic(err)
+	}
+
+	// Create repository
+	repo := NewSQLiteLoanRepository(db)
+
 	e := echo.New()
-	e.POST("/loans", createLoanHandler)
-	e.GET("/loans/:id", getLoanHandler)
-	e.POST("/loans/:id/pay", payLoanHandler)
-	e.GET("/loans/:id/outstanding", getOutstandingHandler)
-	e.GET("/loans/:id/delinquent", getDelinquencyHandler)
+	e.POST("/loans", func(c echo.Context) error { return createLoanHandler(c, repo) })
+	e.GET("/loans/:id", func(c echo.Context) error { return getLoanHandler(c, repo) })
+	e.POST("/loans/:id/pay", func(c echo.Context) error { return payLoanHandler(c, repo) })
+	e.GET("/loans/:id/outstanding", func(c echo.Context) error { return getOutstandingHandler(c, repo) })
+	e.GET("/loans/:id/delinquent", func(c echo.Context) error { return getDelinquencyHandler(c, repo) })
 	return e
 }
 
@@ -52,7 +68,9 @@ func TestCreateLoanAPI(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, body string) {
 				var resp map[string]string
-				json.Unmarshal([]byte(body), &resp)
+				if err := json.Unmarshal([]byte(body), &resp); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
 				if resp["error"] != "invalid request" {
 					t.Errorf("expected error 'invalid request', got %q", resp["error"])
 				}
@@ -64,7 +82,9 @@ func TestCreateLoanAPI(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, body string) {
 				var resp map[string]string
-				json.Unmarshal([]byte(body), &resp)
+				if err := json.Unmarshal([]byte(body), &resp); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
 				if resp["error"] != "weekly equal amount not integral" {
 					t.Errorf("expected error 'weekly equal amount not integral', got %q", resp["error"])
 				}
@@ -76,7 +96,9 @@ func TestCreateLoanAPI(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, body string) {
 				var resp map[string]string
-				json.Unmarshal([]byte(body), &resp)
+				if err := json.Unmarshal([]byte(body), &resp); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
 				if resp["error"] != "invalid request" {
 					t.Errorf("expected error 'invalid request', got %q", resp["error"])
 				}
@@ -150,7 +172,9 @@ func TestPaymentAPI(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, body string) {
 				var resp map[string]string
-				json.Unmarshal([]byte(body), &resp)
+				if err := json.Unmarshal([]byte(body), &resp); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
 				if resp["error"] != "amount must equal this week's payable" {
 					t.Errorf("expected error 'amount must equal this week's payable', got %q", resp["error"])
 				}
@@ -163,7 +187,9 @@ func TestPaymentAPI(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, body string) {
 				var resp map[string]string
-				json.Unmarshal([]byte(body), &resp)
+				if err := json.Unmarshal([]byte(body), &resp); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
 				if resp["error"] != "loan not found" {
 					t.Errorf("expected error 'loan not found', got %q", resp["error"])
 				}
@@ -224,7 +250,9 @@ func TestOutstandingAPI(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			checkError: func(t *testing.T, body string) {
 				var resp map[string]string
-				json.Unmarshal([]byte(body), &resp)
+				if err := json.Unmarshal([]byte(body), &resp); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
 				if resp["error"] != "loan not found" {
 					t.Errorf("expected error 'loan not found', got %q", resp["error"])
 				}
@@ -297,7 +325,9 @@ func TestDelinquencyAPI(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			checkError: func(t *testing.T, body string) {
 				var resp map[string]string
-				json.Unmarshal([]byte(body), &resp)
+				if err := json.Unmarshal([]byte(body), &resp); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
 				if resp["error"] != "loan not found" {
 					t.Errorf("expected error 'loan not found', got %q", resp["error"])
 				}

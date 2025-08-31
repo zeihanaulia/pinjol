@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Nix
+flake.nix
+flake.lock
+
+# Documentation
+README.md
+runner_spec.md
+
+# Tests (exclude from build context)
+*_test.go
+tests/
+
+# Development files
+Makefile
+.dockerignore
+
+# Database files (not needed in image)
+*.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

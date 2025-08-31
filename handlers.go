@@ -5,16 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
-)
-
-// In-memory storage for loans (in production, use a database)
-var (
-	loans = make(map[string]*Loan)
-	mu    sync.RWMutex
 )
 
 // CreateLoanRequest represents the request body for creating a loan
@@ -61,7 +54,7 @@ func versionHandler(version, buildTime string) echo.HandlerFunc {
 	}
 }
 
-func createLoanHandler(c echo.Context) error {
+func createLoanHandler(c echo.Context, repo LoanRepository) error {
 	var req CreateLoanRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": ErrInvalidRequest.Error()})
@@ -90,29 +83,29 @@ func createLoanHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": ErrInvalidRequest.Error()})
 	}
 
-	// Store loan
-	mu.Lock()
-	loans[id] = loan
-	mu.Unlock()
+	// Store loan in database
+	if err := repo.Create(loan); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create loan"})
+	}
 
 	return c.JSON(http.StatusCreated, loan)
 }
 
-func getLoanHandler(c echo.Context) error {
+func getLoanHandler(c echo.Context, repo LoanRepository) error {
 	id := c.Param("id")
 
-	mu.RLock()
-	loan, exists := loans[id]
-	mu.RUnlock()
-
-	if !exists {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": ErrLoanNotFound.Error()})
+	loan, err := repo.GetByID(id)
+	if err != nil {
+		if err == ErrLoanNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve loan"})
 	}
 
 	return c.JSON(http.StatusOK, loan)
 }
 
-func payLoanHandler(c echo.Context) error {
+func payLoanHandler(c echo.Context, repo LoanRepository) error {
 	id := c.Param("id")
 
 	var req PaymentRequest
@@ -120,11 +113,13 @@ func payLoanHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": ErrInvalidRequest.Error()})
 	}
 
-	mu.Lock()
-	loan, exists := loans[id]
-	if !exists {
-		mu.Unlock()
-		return c.JSON(http.StatusNotFound, map[string]string{"error": ErrLoanNotFound.Error()})
+	// Get loan from database
+	loan, err := repo.GetByID(id)
+	if err != nil {
+		if err == ErrLoanNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve loan"})
 	}
 
 	// Find the first unpaid week index (1-based) before making payment
@@ -137,15 +132,18 @@ func payLoanHandler(c echo.Context) error {
 	}
 
 	now := time.Now().UTC()
-	err := loan.MakePayment(req.Amount, now)
+	err = loan.MakePayment(req.Amount, now)
 	if err != nil {
-		mu.Unlock()
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	// Update loan in database
+	if err := repo.Update(loan); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update loan"})
 	}
 
 	// Recompute outstanding after payment
 	remainingOutstanding := loan.GetOutstanding()
-	mu.Unlock()
 
 	response := PaymentResponse{
 		PaidWeek:             firstUnpaidWeek,
@@ -155,15 +153,15 @@ func payLoanHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-func getOutstandingHandler(c echo.Context) error {
+func getOutstandingHandler(c echo.Context, repo LoanRepository) error {
 	id := c.Param("id")
 
-	mu.RLock()
-	loan, exists := loans[id]
-	mu.RUnlock()
-
-	if !exists {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": ErrLoanNotFound.Error()})
+	loan, err := repo.GetByID(id)
+	if err != nil {
+		if err == ErrLoanNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve loan"})
 	}
 
 	// Recompute outstanding from schedule to ensure consistency
@@ -176,15 +174,15 @@ func getOutstandingHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-func getDelinquencyHandler(c echo.Context) error {
+func getDelinquencyHandler(c echo.Context, repo LoanRepository) error {
 	id := c.Param("id")
 
-	mu.RLock()
-	loan, exists := loans[id]
-	mu.RUnlock()
-
-	if !exists {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": ErrLoanNotFound.Error()})
+	loan, err := repo.GetByID(id)
+	if err != nil {
+		if err == ErrLoanNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve loan"})
 	}
 
 	// Check for time override in query parameter
