@@ -474,7 +474,7 @@ func payLoanHandler(c echo.Context, repo domain.LoanRepository, service *domain.
 	metrics.RecordRevenue(float64(req.Amount))
 	metrics.RecordDatabaseQuery("update", "loans", time.Since(start))
 
-	response := domain.PaymentResponse{
+	response := PaymentResponse{
 		PaidWeek:             firstUnpaidWeek,
 		RemainingOutstanding: remainingOutstanding,
 	}
@@ -524,7 +524,7 @@ func getOutstandingHandler(c echo.Context, repo domain.LoanRepository, service *
 	// Recompute outstanding from schedule to ensure consistency
 	outstanding := loan.GetOutstanding()
 
-	response := domain.OutstandingResponse{
+	response := OutstandingResponse{
 		Outstanding: outstanding,
 	}
 
@@ -594,7 +594,7 @@ func getDelinquencyHandler(c echo.Context, repo domain.LoanRepository, service *
 
 	delinquent, streak, observedWeek := loan.IsDelinquent(now)
 
-	response := domain.DelinquencyResponse{
+	response := DelinquencyResponse{
 		Delinquent:   delinquent,
 		Streak:       streak,
 		ObservedWeek: observedWeek,
