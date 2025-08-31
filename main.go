@@ -97,9 +97,6 @@ func mainServer() {
 	// Create repository
 	repo := NewSQLiteLoanRepository(db)
 
-	// Create domain repository adapter
-	domainRepo := NewDomainLoanRepositoryAdapter(repo)
-
 	// Create domain service
 	service := domain.NewLoanService()
 
@@ -129,11 +126,11 @@ func mainServer() {
 	e.GET("/metrics", echo.WrapHandler(metrics.GetPrometheusHandler()))
 
 	// Loan endpoints with repository injection
-	e.POST("/loans", func(c echo.Context) error { return createLoanHandler(c, domainRepo, service) })
-	e.GET("/loans/:id", func(c echo.Context) error { return getLoanHandler(c, domainRepo, service) })
-	e.POST("/loans/:id/pay", func(c echo.Context) error { return payLoanHandler(c, domainRepo, service) })
-	e.GET("/loans/:id/outstanding", func(c echo.Context) error { return getOutstandingHandler(c, domainRepo, service) })
-	e.GET("/loans/:id/delinquent", func(c echo.Context) error { return getDelinquencyHandler(c, domainRepo, service) })
+	e.POST("/loans", func(c echo.Context) error { return createLoanHandler(c, repo, service) })
+	e.GET("/loans/:id", func(c echo.Context) error { return getLoanHandler(c, repo, service) })
+	e.POST("/loans/:id/pay", func(c echo.Context) error { return payLoanHandler(c, repo, service) })
+	e.GET("/loans/:id/outstanding", func(c echo.Context) error { return getOutstandingHandler(c, repo, service) })
+	e.GET("/loans/:id/delinquent", func(c echo.Context) error { return getDelinquencyHandler(c, repo, service) })
 
 	addr := fmt.Sprintf(":%s", port)
 	go func() {

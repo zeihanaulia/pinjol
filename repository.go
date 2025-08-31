@@ -9,16 +9,7 @@ import (
 	"pinjol/pkg/domain"
 )
 
-// LoanRepository defines the interface for loan data persistence
-type LoanRepository interface {
-	Create(loan *domain.Loan) error
-	GetByID(id string) (*domain.Loan, error)
-	Update(loan *domain.Loan) error
-	List() ([]*domain.Loan, error)
-	Delete(id string) error
-}
-
-// SQLiteLoanRepository implements LoanRepository using SQLite
+// SQLiteLoanRepository implements domain.LoanRepository using SQLite
 type SQLiteLoanRepository struct {
 	db *sql.DB
 }
@@ -185,37 +176,4 @@ func (r *SQLiteLoanRepository) Delete(id string) error {
 	return err
 }
 
-// DomainLoanRepositoryAdapter adapts the main repository to domain interface
-type DomainLoanRepositoryAdapter struct {
-	repo *SQLiteLoanRepository
-}
 
-// NewDomainLoanRepositoryAdapter creates a new adapter
-func NewDomainLoanRepositoryAdapter(repo *SQLiteLoanRepository) *DomainLoanRepositoryAdapter {
-	return &DomainLoanRepositoryAdapter{repo: repo}
-}
-
-// Create implements domain.LoanRepository
-func (a *DomainLoanRepositoryAdapter) Create(loan *domain.Loan) error {
-	return a.repo.Create(loan)
-}
-
-// GetByID implements domain.LoanRepository
-func (a *DomainLoanRepositoryAdapter) GetByID(id string) (*domain.Loan, error) {
-	return a.repo.GetByID(id)
-}
-
-// Update implements domain.LoanRepository
-func (a *DomainLoanRepositoryAdapter) Update(loan *domain.Loan) error {
-	return a.repo.Update(loan)
-}
-
-// List implements domain.LoanRepository
-func (a *DomainLoanRepositoryAdapter) List() ([]*domain.Loan, error) {
-	return a.repo.List()
-}
-
-// Delete implements domain.LoanRepository
-func (a *DomainLoanRepositoryAdapter) Delete(id string) error {
-	return a.repo.Delete(id)
-}

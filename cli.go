@@ -106,7 +106,7 @@ func runCLI() {
 	fmt.Println(string(output))
 }
 
-func runOntimeScenario(repo LoanRepository, startTime time.Time, repeat int, verbose bool) {
+func runOntimeScenario(repo domain.LoanRepository, startTime time.Time, repeat int, verbose bool) {
 	fmt.Println("=== On-time Payment Scenario ===")
 
 	for i := 0; i < repeat && i < 50; i++ {
@@ -142,7 +142,7 @@ func runOntimeScenario(repo LoanRepository, startTime time.Time, repeat int, ver
 	}
 }
 
-func runSkip2Scenario(repo LoanRepository, startDate time.Time, verbose bool) {
+func runSkip2Scenario(repo domain.LoanRepository, startDate time.Time, verbose bool) {
 	fmt.Println("=== Skip 2 Weeks Scenario ===")
 
 	// Simulate being 14 days after start (week 3)
@@ -199,7 +199,7 @@ func runSkip2Scenario(repo LoanRepository, startDate time.Time, verbose bool) {
 		delinquent, streak, observedWeek)
 }
 
-func runFullPayScenario(repo LoanRepository, currentTime time.Time, verbose bool) {
+func runFullPayScenario(repo domain.LoanRepository, currentTime time.Time, verbose bool) {
 	fmt.Println("=== Full Payment Scenario ===")
 
 	// Pay all 50 weeks
