@@ -13,6 +13,159 @@ Pinjol is a billing engine for flat interest loans built using the Echo framewor
 - **Middleware**: Request logging and error handling
 - **Dockerized**: Containerized deployment with volume persistence
 - **Nix-based**: Reproducible development environment
+- **Monitoring & Observability**: Comprehensive monitoring stack with Grafana + Prometheus
+
+## Monitoring & Observability Features
+
+The project includes industrial-grade monitoring capabilities available in the `feat/with-monitoring` branch:
+
+### **Available Monitoring Solutions**
+
+#### **Option 1: Grafana + Prometheus (RECOMMENDED - IMPLEMENTED)**
+**Production-ready monitoring stack with:**
+- **Prometheus**: Time-series metrics database for application and system metrics
+- **Grafana**: Advanced visualization dashboards with pre-built templates
+- **AlertManager**: Intelligent alert management and notifications
+- **Node Exporter**: System metrics collection (CPU, Memory, Disk, Network)
+- **cAdvisor**: Container metrics and resource usage
+- **Loki**: Log aggregation and analysis
+- **Grafana Alloy**: Log shipping and processing
+
+#### **Alternative Solutions**
+- **DataDog**: Fully managed SaaS monitoring platform
+- **New Relic**: Application Performance Monitoring (APM) focused
+- **ELK Stack**: Elasticsearch + Logstash + Kibana for log-centric monitoring
+- **Jaeger**: Distributed tracing for request flow analysis
+
+### **Monitoring Features Available**
+
+#### **Application Metrics**
+- ✅ Health status monitoring (`/healthz`, `/readyz`)
+- ✅ HTTP request rate, latency, and error tracking
+- ✅ Go runtime metrics (goroutines, memory, GC statistics)
+- ✅ Database connection pooling metrics
+- ✅ Business metrics (loans created, payments received, revenue)
+- ✅ Custom Prometheus metrics integration
+
+#### **System Metrics**
+- ✅ CPU usage and load average
+- ✅ Memory utilization and allocation
+- ✅ Disk I/O and storage usage
+- ✅ Network traffic monitoring
+- ✅ Container resource usage
+
+#### **Business Metrics**
+- ✅ Loan creation and approval rates
+- ✅ Payment success/failure tracking
+- ✅ Revenue metrics and KPIs
+- ✅ Borrower activity monitoring
+- ✅ Delinquency rate tracking
+
+#### **Logging & Alerting**
+- ✅ Structured logging with correlation IDs
+- ✅ Log aggregation with Loki
+- ✅ Configurable alert rules
+- ✅ Email/SMS notifications via AlertManager
+
+### **Pre-built Dashboards**
+
+1. **Application Dashboard**: Go runtime metrics, HTTP endpoints performance
+2. **System Dashboard**: CPU, Memory, Disk, Network monitoring
+3. **Business Dashboard**: Loan metrics, revenue, and business KPIs
+4. **Logs Dashboard**: Centralized log viewing and analysis
+
+### **Quick Start with Monitoring**
+
+```bash
+# Switch to monitoring branch
+git checkout feat/with-monitoring
+
+# Start monitoring stack
+./scripts/monitoring.sh start
+
+# Access dashboards
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+# AlertManager: http://localhost:9093
+
+# Check monitoring status
+./scripts/monitoring.sh status
+
+# View logs
+./scripts/monitoring.sh logs grafana
+```
+
+### **Sample Code with Monitoring Integration**
+
+```go
+// Example: Adding business metrics to loan creation
+func createLoanHandler(c echo.Context, repo LoanRepository) error {
+    var req CreateLoanRequest
+    if err := c.Bind(&req); err != nil {
+        metrics.RecordBusinessError("validation", "create_loan")
+        return c.JSON(http.StatusBadRequest, map[string]string{"error": ErrInvalidRequest.Error()})
+    }
+
+    loan, err := NewLoan(uuid.New().String(), req.Principal, req.AnnualRate, req.StartDate)
+    if err != nil {
+        metrics.RecordBusinessError("business_logic", "create_loan")
+        return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+    }
+
+    if err := repo.Create(loan); err != nil {
+        metrics.RecordBusinessError("database", "create_loan")
+        return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create loan"})
+    }
+
+    // Record successful loan creation
+    metrics.RecordLoanCreated("approved", "individual")
+    metrics.RecordRevenue(float64(loan.Principal))
+
+    return c.JSON(http.StatusCreated, loan)
+}
+```
+
+### **Management Commands**
+
+```bash
+# Start monitoring stack
+./scripts/monitoring.sh start
+
+# Stop monitoring
+./scripts/monitoring.sh stop
+
+# Check status
+./scripts/monitoring.sh status
+
+# View service logs
+./scripts/monitoring.sh logs prometheus
+./scripts/monitoring.sh logs grafana
+
+# Clean up (removes all data)
+./scripts/monitoring.sh clean
+```
+
+### **Production Deployment**
+
+For production deployment with monitoring:
+
+```bash
+# Use production docker-compose
+docker-compose -f docker/monitoring/docker-compose.prod.yml up -d
+
+# Configure environment variables
+export PROMETHEUS_RETENTION=30d
+export GRAFANA_ADMIN_PASSWORD=strong-password
+export ALERTMANAGER_SMTP_HOST=smtp.gmail.com
+```
+
+### **Security Considerations**
+
+- Change default Grafana admin password
+- Configure HTTPS with SSL certificates
+- Set up authentication and authorization
+- Implement network segmentation
+- Regular security updates for all components
 
 ## Loan Product Specifications
 
