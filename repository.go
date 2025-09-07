@@ -166,7 +166,7 @@ func (r *SQLiteLoanRepository) List() ([]*Loan, error) {
 			return nil, fmt.Errorf("failed to scan loan row: %w", err)
 		}
 
-		loan.StartDate, err = time.Parse("2006-01-02T15:04:05Z07:00", startDateStr)
+		loan.StartDate, err = time.Parse("2006-01-02 15:04:05Z07:00", startDateStr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse start date: %w", err)
 		}
